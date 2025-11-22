@@ -1,0 +1,5 @@
+Overall Steps
+1. Test each page one by one 
+2. Identify the problems 
+3. Fix the problems 
+4. Repeat 

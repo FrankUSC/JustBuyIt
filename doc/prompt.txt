@@ -1,0 +1,120 @@
+🚀 Master Context: "Pocket Hedge Fund" (Premium Edition)
+1. Project Identity & Design Language
+Goal: Build an Autonomous AI Quantitative Trading Platform. Design Inspiration: Level Financial Theme. Visual Style: "Premium Dark Fintech" / "Cyber-Glass".
+
+Backgrounds: Deep rich navies (#020617) and slate blacks (#0f172a), NOT just flat black.
+
+Cards: Glassmorphism is mandatory. Use bg-slate-900/50, backdrop-blur-xl, and thin border-white/10 borders.
+
+Accents: High-contrast neon gradients.
+
+Primary Action: Blue-to-Purple gradient (bg-gradient-to-r from-blue-600 to-violet-600).
+
+Profit/Success: Emerald-to-Teal gradient text (text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-400).
+
+Typography: Plus Jakarta Sans or Inter. Large, bold, tracking-tight headings.
+
+Shadows: Colored glows (shadow-lg shadow-blue-500/20).
+
+2. Tech Stack (Hackathon Optimized)
+Frontend: React (Vite) + TailwindCSS + Framer Motion (for smooth "Agent Thinking" animations) + Recharts.
+
+Backend: FastAPI (Python).
+
+Data Engine: DuckDB + yfinance (Bulk Download Mode).
+
+AI: OpenAI API (GPT-4o for logic, GPT-3.5 for bulk tasks).
+
+3. Core Architecture: The "Autonomous Loop"
+Phase 0: The Data Lake (Initialization)
+Action: On startup, check for sp500_history.duckdb.
+
+If Missing: Trigger a Bulk Download of the top 50 S&P 500 stocks for the last 10 years.
+
+Storage: Store as a localized Parquet/DuckDB file for instant querying (0ms latency).
+
+Phase 1: The "Scout Agent" (Query Generator)
+UI: User types a natural language goal: "Find me aggressive growth tech stocks that are currently beaten down."
+
+Logic: LLM translates this to a Pandas query against the local DB:
+
+Sector == 'Technology'
+
+Price < 50_Day_MA (Beaten down)
+
+Revenue_Growth > 15% (Aggressive Growth)
+
+Output: Returns Top 30 candidate tickers.
+
+Phase 2: The "Evaluation Agent" (Risk & Sentiment)
+Input: The 30 candidates.
+
+Logic:
+
+Technical Check: Filter by RSI < 70 (not overbought).
+
+Risk Check (Proxy): Fetch ticker.news. If headlines contain ["lawsuit", "investigation", "misses estimates"], apply a "Risk Penalty".
+
+Decision: Select the Top 10 stocks.
+
+Phase 3: The "Portfolio Manager" (Execution)
+Logic: Construct a portfolio.
+
+Weighting: Equal Weight (10% each).
+
+Output: A JSON structure of the "Buy Orders".
+
+Phase 4: The "Time Machine" Backtester (The Judge Pleaser)
+Trigger: "Run Backtest" button.
+
+Algorithm:
+
+Set Simulated_Date to 3 years ago.
+
+Loop (Step = 6 Months):
+
+Mask data to hide the future.
+
+Run Scout -> Eval -> Portfolio Agents.
+
+"Buy" the selected stocks.
+
+Hold for 6 months.
+
+Sell and Re-run Agents.
+
+Result: Generate a dataset matching the Portfolio Cumulative Return vs SPY (Benchmark).
+
+4. UI/UX Requirements (Specific)
+The "Command Center" Layout
+Sidebar: Glassmorphic vertical navigation on the left. Icons for "Dashboard", "Backtest", "Settings".
+
+Hero Area: Top of dashboard. Display "Total Assets" and "Alpha Generated" using huge gradient text (e.g., text-6xl).
+
+The "Agent Stream": A dedicated column on the right.
+
+Design: Looks like a futuristic terminal.
+
+Animation: When agents are working, show a "Scanning..." pulse animation.
+
+Logs:
+
+[SCOUT]: Querying DB for 'Undervalued Tech'... Found 24 matches.
+
+[EVAL]: ⚠️ Rejecting INTC. Detected 'Earnings Miss' in news.
+
+[PORTFOLIO]: Rebalancing... Buying NVDA @ $450.
+
+The Charts
+Use Recharts.
+
+Style: Dark background, grid lines almost invisible (stroke="#334155").
+
+Lines: Thick stroke (strokeWidth={3}), using gradient definitions (SVG defs) to make the line glow.
+
+5. Hackathon Survival Rules
+Cache Everything: If a user searches "Tech Stocks" twice, don't run the LLM again. Serve from RAM.
+
+Fake the News: yfinance news is sparse. If news is empty, assume "Neutral Sentiment" to prevent crashes.
+
+Progress Bar: The initial data download takes 30-60 seconds. You MUST show a beautiful, animated progress bar so the user knows the app isn't frozen.
