@@ -26,7 +26,7 @@ interface BacktestAgentState {
   setStepMonths: (m: number) => void;
 }
 
-const DEFAULT_STEP_MONTHS = 6;
+const DEFAULT_STEP_MONTHS = 1;
 
 export const useBacktestAgent = create<BacktestAgentState>((set, get) => ({
   isLoading: false,

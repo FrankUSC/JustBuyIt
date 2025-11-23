@@ -100,7 +100,18 @@ export const PortfolioChart: React.FC<PortfolioChartProps> = ({ data, height = 4
 
   const monthTicks = React.useMemo(() => scaledMonthly.map(m => m.date), [scaledMonthly]);
 
-  
+  const renderLegend = (props: any) => {
+    const items = (props?.payload || []) as Array<any>;
+    return (
+      <div style={{ display: 'flex', gap: 16, color: '#cbd5e1', justifyContent: 'center', alignItems: 'center', width: '100%', textAlign: 'center' }}>
+        {items.map((item) => (
+          <span key={item.value} style={{ color: item.dataKey === 'spy_balance' ? '#facc15' : '#cbd5e1' }}>
+            {item.value}
+          </span>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <GlassCard className={`h-[${height}px]`}>
@@ -119,8 +130,8 @@ export const PortfolioChart: React.FC<PortfolioChartProps> = ({ data, height = 4
                   <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
                 </linearGradient>
                 <linearGradient id="spyGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#64748b" stopOpacity={0.8}/>
-                  <stop offset="95%" stopColor="#64748b" stopOpacity={0}/>
+                  <stop offset="5%" stopColor="#facc15" stopOpacity={0.8}/>
+                  <stop offset="95%" stopColor="#facc15" stopOpacity={0}/>
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" strokeOpacity={0.3} />
@@ -138,6 +149,7 @@ export const PortfolioChart: React.FC<PortfolioChartProps> = ({ data, height = 4
                 stroke="#64748b"
                 fontSize={12}
                 tickFormatter={(value) => `${Math.round(value).toLocaleString()}`}
+                domain={[800000, 'auto']}
               />
               <Tooltip 
                 formatter={formatTooltip}
@@ -150,11 +162,11 @@ export const PortfolioChart: React.FC<PortfolioChartProps> = ({ data, height = 4
                   color: '#ffffff'
                 }}
               />
-              <Legend wrapperStyle={{ color: '#cbd5e1' }} />
+              <Legend content={renderLegend} />
               <Area
                 type="monotone"
                 dataKey="spy_balance"
-                stroke="#64748b"
+                stroke="#facc15"
                 strokeWidth={2}
                 fillOpacity={1}
                 fill="url(#spyGradient)"

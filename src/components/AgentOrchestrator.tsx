@@ -88,9 +88,9 @@ export const AgentOrchestrator: React.FC = () => {
       // Phase 4: Backtest Agent
       setCurrentPhase(4);
       setProgressPercent(80);
-      addLog('BACKTEST', 'Initializing time machine simulation...', 'info');
+      addLog('BACKTEST', 'Initializing time machine simulation for 1 year...', 'info');
       const startDate = new Date();
-      startDate.setFullYear(startDate.getFullYear() - 3);
+      startDate.setFullYear(startDate.getFullYear() - 1);
       const endDate = new Date();
       
       await runBacktest(startDate.toISOString().split('T')[0], endDate.toISOString().split('T')[0]);
@@ -203,20 +203,45 @@ export const AgentOrchestrator: React.FC = () => {
                 <h3 className="text-xl font-bold text-white">Pipeline Results</h3>
                 <TrendingUp className="w-6 h-6 text-emerald-400" />
               </div>
-              <div className="grid grid-cols-3 gap-6">
-                <div className="text-center">
-                  <p className="text-slate-400 text-sm mb-2">Total Return</p>
-                  <GradientText text="+12.5%" className="text-2xl font-bold" />
-                </div>
-                <div className="text-center">
-                  <p className="text-slate-400 text-sm mb-2">Alpha Generated</p>
-                  <GradientText text="+4.3%" className="text-2xl font-bold" />
-                </div>
-                <div className="text-center">
-                  <p className="text-slate-400 text-sm mb-2">Max Drawdown</p>
-                  <span className="text-2xl font-bold text-red-400">-8.2%</span>
-                </div>
-              </div>
+              {(() => {
+                const first = backtestResults[0];
+                const last = backtestResults[backtestResults.length - 1];
+                const p0 = first?.portfolio_value || 100;
+                const p1 = last?.portfolio_value || p0;
+                const s0 = first?.spy_value || 100;
+                const s1 = last?.spy_value || s0;
+                const totalRet = p0 > 0 ? (p1 / p0 - 1) : 0;
+                const spyRet = s0 > 0 ? (s1 / s0 - 1) : 0;
+                const alpha = totalRet - spyRet;
+                let peak = p0;
+                let ddMin = 0;
+                for (const r of backtestResults) {
+                  const v = r.portfolio_value || p0;
+                  if (v > peak) peak = v;
+                  const dd = peak > 0 ? (v / peak - 1) : 0;
+                  if (dd < ddMin) ddMin = dd;
+                }
+                const fmt = (x: number) => `${x >= 0 ? '+' : ''}${(x * 100).toFixed(1)}%`;
+                const totalStr = fmt(totalRet);
+                const alphaStr = fmt(alpha);
+                const ddStr = `${(ddMin * 100).toFixed(1)}%`;
+                return (
+                  <div className="grid grid-cols-3 gap-6">
+                    <div className="text-center">
+                      <p className="text-slate-400 text-sm mb-2">Total Return</p>
+                      <GradientText text={totalStr} className="text-2xl font-bold" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-slate-400 text-sm mb-2">Alpha Generated</p>
+                      <GradientText text={alphaStr} className="text-2xl font-bold" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-slate-400 text-sm mb-2">Max Drawdown</p>
+                      <span className="text-2xl font-bold text-red-400">{ddStr}</span>
+                    </div>
+                  </div>
+                );
+              })()}
             </GlassCard>
           </motion.div>
         )}
