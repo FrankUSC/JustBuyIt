@@ -7,6 +7,7 @@ import { useAgentStream } from '../stores/agentStream';
 import { Search, TrendingUp, Activity, Brain, BarChart3, MessageSquare, Trophy } from 'lucide-react';
 import { useEvaluationAgent } from '../stores/evaluationAgent';
 import { useScoutAgent } from '../stores/scoutAgent';
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8001';
 
 interface AgentPhase {
   name: string;
@@ -72,7 +73,7 @@ export const SpoonAIAgentOrchestrator: React.FC = () => {
 
   const checkAgentsStatus = async () => {
     try {
-      const response = await fetch('http://localhost:8001/api/agents/status');
+      const response = await fetch(`${API}/api/agents/status`);
       const status = await response.json();
       setAgentsStatus(status);
     } catch (error) {
@@ -95,7 +96,7 @@ export const SpoonAIAgentOrchestrator: React.FC = () => {
       setPhases((prev) => prev.map((p, i) => ({ ...p, status: i === 0 ? 'running' : p.status })));
       
       // Run the main orchestrator
-      const response = await fetch('http://localhost:8001/api/agents/build-portfolio', {
+      const response = await fetch(`${API}/api/agents/build-portfolio`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -149,7 +150,7 @@ export const SpoonAIAgentOrchestrator: React.FC = () => {
       
       switch (agentType) {
         case 'scout':
-          response = await fetch('http://localhost:8001/api/agents/scout', {
+          response = await fetch(`${API}/api/agents/scout`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ query: query || '', stock_count: 10 })
@@ -168,7 +169,7 @@ export const SpoonAIAgentOrchestrator: React.FC = () => {
             sample: (result?.candidates || []).slice(0, 5).map((c: any) => c.ticker),
             candidates: (result?.candidates || [])
           });
-          await fetch('http://localhost:8001/api/memory/append', {
+          await fetch(`${API}/api/memory/append`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ thread_id: 'phf', role: 'assistant', content: `Scout found ${typeof result?.total_found === 'number' ? result.total_found : (result?.candidates || []).length}`, meta: { type: 'scout', sample: (result?.candidates || []).slice(0,5).map((c:any)=>c.ticker) } })
@@ -177,13 +178,13 @@ export const SpoonAIAgentOrchestrator: React.FC = () => {
           setPhases(prev => prev.map((p, idx) => ({ ...p, status: idx === 0 ? 'completed' : p.status })));
           break;
         case 'evaluation': {
-          response = await fetch('http://localhost:8001/api/agents/scout', {
+          response = await fetch(`${API}/api/agents/scout`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ query: query || '', stock_count: 8 })
           });
           const scoutForEval = await response.json();
-          result = await fetch('http://localhost:8001/api/agents/evaluate', {
+          result = await fetch(`${API}/api/agents/evaluate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify((scoutForEval?.candidates || []))

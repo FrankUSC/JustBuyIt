@@ -10,6 +10,7 @@ import { PortfolioChart } from './components/PortfolioChart';
 import { motion } from 'framer-motion';
 import { usePortfolioManager } from './stores/portfolioManager';
 import { useBacktestAgent } from './stores/backtestAgent';
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8001';
 
 function App() {
   const [activeView, setActiveView] = useState('dashboard');
@@ -134,10 +135,10 @@ function App() {
                     <h3 className="text-xl font-bold text-white">Portfolio Analysis</h3>
                     <button
                       onClick={async ()=>{
-                        const mem = await fetch('http://localhost:8001/api/memory/get', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ thread_id: 'phf' }) });
+                        const mem = await fetch(`${API}/api/memory/get`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ thread_id: 'phf' }) });
                         const memData = mem.ok ? await mem.json() : { messages: [] };
                         const payload = { portfolio: selectedPortfolio, backtest_results: backtestResults, memory: memData.messages, cash: usePortfolioManager.getState().cash_remaining };
-                        const res = await fetch('http://localhost:8001/api/agents/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                        const res = await fetch(`${API}/api/agents/analyze`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                         if (res.ok) {
                           const data = await res.json();
                           setSummary(data.summary || '');
