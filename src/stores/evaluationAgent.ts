@@ -7,6 +7,7 @@ interface EvaluatedStock {
   sentiment: 'positive' | 'negative' | 'neutral';
   recommendation: 'buy' | 'sell' | 'hold';
   reasoning: string;
+  sector?: string;
 }
 
 interface EvaluationAgentState {
@@ -118,7 +119,8 @@ export const useEvaluationAgent = create<EvaluationAgentState>((set, _get) => ({
           risk_factors,
           sentiment,
           recommendation,
-          reasoning
+          reasoning,
+          sector: latest?.sector ?? 'Unknown'
         });
       }
       

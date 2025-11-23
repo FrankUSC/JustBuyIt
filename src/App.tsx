@@ -148,7 +148,32 @@ function App() {
                     <div className="text-slate-400 text-sm mb-4">No backtest data. Run a backtest first.</div>
                   )}
                   {summary && (
-                    <div className="text-slate-200 text-sm whitespace-pre-wrap">{summary}</div>
+                    <div className="space-y-3">
+                      {summary.split('\n').map((line, idx) => {
+                        const [label, rest] = line.includes(':') ? [line.split(':')[0], line.split(':').slice(1).join(':').trim()] : [line, ''];
+                        if (label.toLowerCase().includes('sector distribution')) {
+                          const sectors = rest.split(',').map(s => s.trim());
+                          return (
+                            <div key={idx} className="text-sm">
+                              <span className="text-slate-400">Sector distribution</span>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {sectors.map((sec, i) => (
+                                  <span key={i} className="px-2 py-1 bg-slate-800/50 border border-white/10 rounded-md text-slate-200 text-xs">
+                                    {sec}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        }
+                        return (
+                          <div key={idx} className="flex items-center justify-between text-sm">
+                            <span className="text-slate-400">{label}</span>
+                            {rest && <span className="text-slate-200">{rest}</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
                 </GlassCard>
               </motion.div>

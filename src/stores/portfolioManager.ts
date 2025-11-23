@@ -8,6 +8,7 @@ interface PortfolioStock {
   value: number;
   weight: number;
   score: number;
+  sector?: string;
 }
 
 interface PortfolioManagerState {
@@ -51,7 +52,8 @@ export const usePortfolioManager = create<PortfolioManagerState>((set, get) => (
           current_price: stock.current_price,
           value,
           weight: equal_weight,
-          score: stock.score
+          score: stock.score,
+          sector: stock.sector
         };
       });
       
