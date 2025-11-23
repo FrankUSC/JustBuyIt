@@ -13,8 +13,18 @@ from abc import ABC, abstractmethod
 import uuid
 import os
 from dotenv import load_dotenv
+import logging
+import sys
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+logger = logging.getLogger(__name__)
+if not logger.handlers:
+    _h = logging.StreamHandler(sys.stdout)
+    _h.setLevel(logging.DEBUG)
+    _h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s [%(name)s] %(message)s"))
+    logger.addHandler(_h)
+logger.setLevel(logging.DEBUG)
+logger.propagate = False
 
 try:
     from spoon_ai.agents.toolcall import ToolCallAgent
@@ -23,7 +33,7 @@ try:
     from spoon_ai.tools.base import BaseTool
     from spoon_ai.schema import Message
     SPOON_AVAILABLE = True
-    print("✅ SpoonAI components loaded successfully")
+    logger.info("✅ SpoonAI components loaded successfully")
 except Exception:
     ToolCallAgent = object  # type: ignore
     ChatBot = object  # type: ignore
@@ -31,7 +41,7 @@ except Exception:
     BaseTool = object  # type: ignore
     Message = dict  # type: ignore
     SPOON_AVAILABLE = False
-    print("⚠️ SpoonAI components not available")
+    logger.warning("⚠️ SpoonAI components not available")
 
 
 
@@ -51,7 +61,7 @@ class MockStateGraph:
         if from_node not in self.edges:
             self.edges[from_node] = []
         self.edges[from_node].append((to_node, condition))
-        print(f"📊 Added edge: {from_node} -> {to_node} with condition: {condition}")
+        logger.debug(f"📊 Added edge: {from_node} -> {to_node} with condition: {condition}")
     
     def set_entry_point(self, node_name):
         self.entry_point = node_name
@@ -65,10 +75,10 @@ class MockStateGraph:
     
     async def run(self, initial_state):
         """Execute the graph with the given initial state"""
-        print(f"🔄 Starting graph execution with entry point: {self.entry_point}")
-        print(f"📋 Available nodes: {list(self.nodes.keys())}")
-        print(f"📋 Available edges: {self.edges}")
-        print(f"🏁 Finish points: {self.finish_points}")
+        logger.debug(f"🔄 Starting graph execution with entry point: {self.entry_point}")
+        logger.debug(f"📋 Available nodes: {list(self.nodes.keys())}")
+        logger.debug(f"📋 Available edges: {self.edges}")
+        logger.debug(f"🏁 Finish points: {self.finish_points}")
         
         current_state = json.loads(initial_state) if isinstance(initial_state, str) else initial_state
         current_node = self.entry_point
@@ -77,41 +87,41 @@ class MockStateGraph:
         
         while current_node and current_node not in self.finish_points and step_count < 20:  # Safety limit
             step_count += 1
-            print(f"📍 Step {step_count}: Executing node: {current_node}")
-            print(f"📝 Current state before execution: {current_state}")
-            print(f"🔍 Executed nodes so far: {executed_nodes}")
+            logger.debug(f"📍 Step {step_count}: Executing node: {current_node}")
+            logger.debug(f"📝 Current state before execution: {current_state}")
+            logger.debug(f"🔍 Executed nodes so far: {executed_nodes}")
             
             if current_node in executed_nodes:
-                print(f"⚠️ Node {current_node} already executed, possible cycle detected")
-                print(f"🔄 Breaking cycle by stopping execution")
+                logger.warning(f"⚠️ Node {current_node} already executed, possible cycle detected")
+                logger.warning(f"🔄 Breaking cycle by stopping execution")
                 break
                 
             if current_node not in self.nodes:
-                print(f"❌ Node {current_node} not found in nodes: {list(self.nodes.keys())}")
+                logger.error(f"❌ Node {current_node} not found in nodes: {list(self.nodes.keys())}")
                 break
             
             node = self.nodes[current_node]
-            print(f"🎯 Found node: {node.name if hasattr(node, 'name') else 'unnamed'}")
+            logger.debug(f"🎯 Found node: {node.name if hasattr(node, 'name') else 'unnamed'}")
             
             # Execute node
             if hasattr(node, 'func'):
-                print(f"🚀 Executing function for node: {current_node}")
-                print(f"📝 Node function: {node.func.__name__ if hasattr(node.func, '__name__') else 'unnamed'}")
+                logger.debug(f"🚀 Executing function for node: {current_node}")
+                logger.debug(f"📝 Node function: {node.func.__name__ if hasattr(node.func, '__name__') else 'unnamed'}")
                 result = await node.func(current_state)
-                print(f"📊 Node {current_node} result: {result}")
+                logger.debug(f"📊 Node {current_node} result: {result}")
             elif hasattr(node, 'condition_func'):
                 # Condition nodes don't execute, they just determine next node
-                print(f"🎯 Condition node {current_node} - skipping execution")
+                logger.debug(f"🎯 Condition node {current_node} - skipping execution")
                 result = {}
             else:
-                print(f"⚠️ Node {current_node} has no function")
+                logger.warning(f"⚠️ Node {current_node} has no function")
                 result = {}
             
             # Update state - preserve existing fields and only update returned fields
             for key, value in result.items():
                 if key != "current_step" or value != current_state.get("current_step"):  # Only update current_step if it's different
                     current_state[key] = value
-            print(f"📝 Updated state after {current_node}: {current_state}")
+            logger.debug(f"📝 Updated state after {current_node}: {current_state}")
             
             # Track executed node
             executed_nodes.append(current_node)
@@ -119,13 +129,13 @@ class MockStateGraph:
             # Determine next node
             if current_node in self.edges:
                 edges = self.edges[current_node]
-                print(f"🔗 Node {current_node} has edges: {[(edge[0], type(edge[1]).__name__ if edge[1] else 'None') for edge in edges]}")
+                logger.debug(f"🔗 Node {current_node} has edges: {[(edge[0], type(edge[1]).__name__ if edge[1] else 'None') for edge in edges]}")
                 if len(edges) == 1:
                     current_node, condition = edges[0]
-                    print(f"➡️ Moving to next node: {current_node}")
+                    logger.debug(f"➡️ Moving to next node: {current_node}")
                 else:
                     # Handle conditional edges with condition function
-                    print(f"🔍 Processing conditional edges for {current_node}")
+                    logger.debug(f"🔍 Processing conditional edges for {current_node}")
                     
                     # Get the condition result (target node name)
                     if hasattr(edges[0][1], 'condition_func'):  # First condition is a ConditionNode
@@ -133,22 +143,22 @@ class MockStateGraph:
                     else:  # Direct condition function
                         target_node = edges[0][1](current_state)
                     
-                    print(f"🎯 Condition result: {target_node}")
+                    logger.debug(f"🎯 Condition result: {target_node}")
                     
                     # Find the edge that matches the target
                     for next_node, condition in edges:
                         if next_node == target_node:
                             current_node = next_node
-                            print(f"➡️ Moving to conditional node: {current_node}")
+                            logger.debug(f"➡️ Moving to conditional node: {current_node}")
                             break
                     else:
-                        print(f"❌ No edge found for target: {target_node}")
+                        logger.error(f"❌ No edge found for target: {target_node}")
                         break
             else:
-                print(f"🏁 No edges from {current_node}, finishing")
+                logger.info(f"🏁 No edges from {current_node}, finishing")
                 break
         
-        print(f"✅ Graph execution completed after {step_count} steps")
+        logger.info(f"✅ Graph execution completed after {step_count} steps")
         return json.dumps(current_state)
 
 
@@ -165,7 +175,7 @@ class MockGraphAgent:
             result = await self.graph.run(request)
             return result
         except Exception as e:
-            print(f"Error running agent {self.name}: {e}")
+            logger.error(f"Error running agent {self.name}: {e}")
             return json.dumps({"error": str(e)})
 
 
@@ -205,15 +215,17 @@ if SPOON_AVAILABLE:
                 "min_market_cap": {"type": "number"},
                 "max_rsi": {"type": "number"},
                 "min_revenue_growth": {"type": "number"},
+                "sector": {"type": "string"},
             },
             "required": ["limit"]
         }
-        async def execute(self, limit: int, min_market_cap: float = 0, max_rsi: float = 100, min_revenue_growth: float = 0) -> List[Dict[str, Any]]:
+        async def execute(self, limit: int, min_market_cap: float = 0, max_rsi: float = 100, min_revenue_growth: float = 0, sector: str = "") -> List[Dict[str, Any]]:
             params = {
                 "limit": limit,
                 "min_market_cap": min_market_cap,
                 "max_rsi": max_rsi,
                 "min_revenue_growth": min_revenue_growth,
+                "sector": sector,
             }
             async with httpx.AsyncClient() as client:
                 r = await client.get("http://localhost:8001/api/stocks/search", params=params)
@@ -328,7 +340,7 @@ if SPOON_AVAILABLE:
                 llm=ChatBot(llm_provider="gemini", model_name=os.getenv("GEMINI_MODEL", "models/gemini-1.5-pro-001")),
                 available_tools=ToolManager([SearchStocksTool()])
             )
-            print("✅ SpoonScoutAgent initialized with Gemini LLM")
+            logger.info("✅ SpoonScoutAgent initialized with Gemini LLM")
         
         def _interpret_query_to_criteria(self, query: str, default_limit: int = 30) -> Dict[str, Any]:
             """Interpret a natural language query into search criteria.
@@ -363,13 +375,15 @@ if SPOON_AVAILABLE:
             if not query:
                 return {}
             prompt = (
-                "Based on the description of the Query, please generate a stock screener criteria with numeric filters and return ONLY JSON with keys: "
-                "min_market_cap (USD number), max_rsi (number), min_revenue_growth (percent number). "
+                "Based on the description of the Query, please generate a stock screener criteria and return ONLY JSON with keys: "
+                "min_market_cap (USD number), max_rsi (number), min_revenue_growth (percent number), sector (only populate the value "
+                " if the query clearly indicates a sector, for example: Find large cap tech stocks should return Technology as the sector value. string from this list only: "
+                "Technology, Consumer Discretionary, Financials, Healthcare, Energy, Consumer Staples, Communication Services, Utilities, Materials, Real Estate, Information Technology, Industrials). "
                 "Query: " + query
             )
             try:
                 result_text = None
-                print(f"🔍 Prompt: {prompt}")
+                logger.debug(f"🔍 Prompt: {prompt}")
                 if hasattr(self.llm, "ask"):
                     try:
                         msgs = [Message(role="user", content=prompt)]  # type: ignore
@@ -398,10 +412,10 @@ if SPOON_AVAILABLE:
                     else:
                         result_text = str(result)
                 else:
-                    print(f"❌ No result_text generated, self.llm: {self.llm}")
+                    logger.warning(f"❌ No result_text generated, self.llm: {self.llm}")
                     return {}
                 if not result_text:
-                    print(f"❌ No result_text generated: {result_text}")
+                    logger.warning(f"❌ No result_text generated: {result_text}")
                     return {}
                 
                 import re
@@ -409,6 +423,20 @@ if SPOON_AVAILABLE:
                 text = m.group(0) if m else result_text
                 data = json.loads(text)
                 out: Dict[str, Any] = {"limit": default_limit}
+                allowed_sectors = {
+                    "Technology",
+                    "Consumer Discretionary",
+                    "Financials",
+                    "Healthcare",
+                    "Energy",
+                    "Consumer Staples",
+                    "Communication Services",
+                    "Utilities",
+                    "Materials",
+                    "Real Estate",
+                    "Information Technology",
+                    "Industrials",
+                }
                 if isinstance(data, dict):
                     if "min_market_cap" in data and data["min_market_cap"] is not None:
                         out["min_market_cap"] = float(data["min_market_cap"])
@@ -416,9 +444,13 @@ if SPOON_AVAILABLE:
                         out["max_rsi"] = float(data["max_rsi"])
                     if "min_revenue_growth" in data and data["min_revenue_growth"] is not None:
                         out["min_revenue_growth"] = float(data["min_revenue_growth"])
+                    if "sector" in data and data["sector"] is not None:
+                        sec = str(data["sector"]).strip()
+                        if sec in allowed_sectors:
+                            out["sector"] = sec
                 return out
             except Exception as e:
-                print(f"❌ Error in _llm_generate_criteria: {e}")
+                logger.error(f"❌ Error in _llm_generate_criteria: {e}")
                 import traceback
                 traceback.print_exc()
                 return {}
@@ -428,19 +460,20 @@ if SPOON_AVAILABLE:
             natural_query = state.get("natural_query", "")
             criteria = state.get("search_criteria", {})
             limit = state.get("stock_count", criteria.get("limit", 20))
-            print(f"natural_query: {natural_query}")
-            print(f"criteria: {criteria}")
+            logger.debug(f"natural_query: {natural_query}")
+            logger.debug(f"criteria: {criteria}")
             criteria = await self._llm_generate_criteria(natural_query, default_limit=limit)
-            print(f"generated: {criteria}")
+            logger.debug(f"generated: {criteria}")
             if natural_query and not criteria:
                 criteria = self._interpret_query_to_criteria(natural_query, default_limit=limit)
-                print(f"criteria created: {criteria}")
+                logger.debug(f"criteria created: {criteria}")
             
             params = {
                 "limit": limit,
                 "min_market_cap": criteria.get("min_market_cap", 0),
                 "max_rsi": criteria.get("max_rsi", 100),
-                "min_revenue_growth": criteria.get("min_revenue_growth", 0)
+                "min_revenue_growth": criteria.get("min_revenue_growth", 0),
+                "sector": criteria.get("sector", "")
             }
             data = await self.available_tools.tools[0].execute(**params)
             return json.dumps({"candidates": data, "search_criteria": params})
@@ -463,7 +496,7 @@ if SPOON_AVAILABLE:
                 llm=ChatBot(llm_provider="gemini", model_name=os.getenv("GEMINI_MODEL", "models/gemini-1.5-pro-001")),
                 available_tools=ToolManager([SentimentTool()])
             )
-            print("✅ SpoonSentimentAgent initialized with Gemini LLM")
+            logger.info("✅ SpoonSentimentAgent initialized with Gemini LLM")
         async def run(self, request: str) -> str:  # type: ignore
             state = json.loads(request) if isinstance(request, str) else request
             tickers = state.get("stocks_to_analyze", [])
@@ -476,7 +509,7 @@ if SPOON_AVAILABLE:
                 llm=ChatBot(llm_provider="gemini", model_name=os.getenv("GEMINI_MODEL", "models/gemini-1.5-pro-001")),
                 available_tools=ToolManager([RankTool()])
             )
-            print("✅ SpoonRankingAgent initialized with Gemini LLM")
+            logger.info("✅ SpoonRankingAgent initialized with Gemini LLM")
         async def run(self, request: str) -> str:  # type: ignore
             state = json.loads(request) if isinstance(request, str) else request
             evaluated = state.get("evaluated_stocks", [])
@@ -551,7 +584,7 @@ async def fetch_stock_data_from_api(ticker: str) -> Dict[str, Any]:
                         "volume": latest["volume"]
                     }
     except Exception as e:
-        print(f"Error fetching data for {ticker}: {e}")
+        logger.error(f"Error fetching data for {ticker}: {e}")
     
     # Fallback data
     return {
@@ -566,7 +599,7 @@ async def fetch_stock_data_from_api(ticker: str) -> Dict[str, Any]:
 
 async def search_stocks_from_api(criteria: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Search stocks using the trading platform API"""
-    print(f"Searching stocks with criteria: {criteria}")
+    logger.info(f"Searching stocks with criteria: {criteria}")
     
     try:
         async with httpx.AsyncClient() as client:
@@ -574,19 +607,20 @@ async def search_stocks_from_api(criteria: Dict[str, Any]) -> List[Dict[str, Any
                 "limit": criteria.get("limit", 30),
                 "min_market_cap": criteria.get("min_market_cap", 0),
                 "max_rsi": criteria.get("max_rsi", 100),
-                "min_revenue_growth": criteria.get("min_revenue_growth", 0)
+                "min_revenue_growth": criteria.get("min_revenue_growth", 0),
+                "sector": criteria.get("sector", "")
             }
             
             response = await client.get("http://localhost:8001/api/stocks/search", params=params)
             if response.status_code == 200:
                 data = response.json()
-                print(f"API returned {len(data)} stocks")
+                logger.info(f"API returned {len(data)} stocks")
                 return data
     except Exception as e:
-        print(f"Error searching stocks via API: {e}")
+        logger.error(f"Error searching stocks via API: {e}")
     
     # Fallback: return mock S&P 500 stocks
-    print("Using fallback mock data")
+    logger.warning("Using fallback mock data")
     sp500_tickers = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'TSLA', 'META', 'BRK-B', 'UNH', 'JNJ',
                      'XOM', 'JPM', 'V', 'PG', 'HD', 'MA', 'CVX', 'LLY', 'ABBV', 'PFE']
     
@@ -604,21 +638,21 @@ async def search_stocks_from_api(criteria: Dict[str, Any]) -> List[Dict[str, Any
             "current_rsi": random.uniform(30, 70)
         })
     
-    print(f"Generated {len(candidates)} mock candidates")
+    logger.info(f"Generated {len(candidates)} mock candidates")
     return candidates
 
 
 # Node implementations
 async def scout_node(state: ScoutState) -> Dict[str, Any]:
     """Scout node to find stock candidates"""
-    print(f"🔍 ScoutAgent: Searching for {state['stock_count']} stock candidates...")
+    logger.info(f"🔍 ScoutAgent: Searching for {state['stock_count']} stock candidates...")
     
     criteria = state.get("search_criteria", {})
     criteria["limit"] = state["stock_count"]
     
     candidates = await search_stocks_from_api(criteria)
     
-    print(f"✅ ScoutAgent: Found {len(candidates)} candidates")
+    logger.info(f"✅ ScoutAgent: Found {len(candidates)} candidates")
     
     return {
         "candidates": candidates,
@@ -628,17 +662,17 @@ async def scout_node(state: ScoutState) -> Dict[str, Any]:
 
 async def evaluation_node(state: EvaluationState) -> Dict[str, Any]:
     """Evaluation node to analyze fundamentals and technical data"""
-    print(f"📊 EvaluationAgent: Evaluating {len(state['stocks_to_evaluate'])} stocks...")
+    logger.info(f"📊 EvaluationAgent: Evaluating {len(state['stocks_to_evaluate'])} stocks...")
     
     evaluation_results = []
     
     for stock in state["stocks_to_evaluate"]:
         ticker = stock["ticker"]
-        print(f"  Evaluating {ticker}...")
+        logger.debug(f"  Evaluating {ticker}...")
         
         # Fetch detailed data
         detailed_data = await fetch_stock_data_from_api(ticker)
-        print(f"    Data: RSI={detailed_data['rsi']}, Price=${detailed_data['current_price']}, MA20=${detailed_data['ma_20']}, MA50=${detailed_data['ma_50']}")
+        logger.debug(f"    Data: RSI={detailed_data['rsi']}, Price=${detailed_data['current_price']}, MA20=${detailed_data['ma_20']}, MA50=${detailed_data['ma_50']}")
         
         # Fundamental analysis (reasonable for normal operation)
         fundamental_score = random.uniform(5, 8)  # Reasonable base range
@@ -666,16 +700,16 @@ async def evaluation_node(state: EvaluationState) -> Dict[str, Any]:
         
         # Reasonable evaluation criteria for normal operation
         market_cap = stock.get("market_cap", 0)
-        print(f"    DEBUG: Checking criteria - Fundamental={fundamental_score:.2f} >= 6.0? {fundamental_score >= 6.0}")
-        print(f"    DEBUG: Checking criteria - Technical={technical_score:.2f} >= 5.0? {technical_score >= 5.0}")
-        print(f"    DEBUG: Checking criteria - Market Cap={market_cap:,.0f} > 10B? {market_cap > 10000000000}")
+        logger.debug(f"    DEBUG: Checking criteria - Fundamental={fundamental_score:.2f} >= 6.0? {fundamental_score >= 6.0}")
+        logger.debug(f"    DEBUG: Checking criteria - Technical={technical_score:.2f} >= 5.0? {technical_score >= 5.0}")
+        logger.debug(f"    DEBUG: Checking criteria - Market Cap={market_cap:,.0f} > 10B? {market_cap > 10000000000}")
         
         evaluation_passed = (
             fundamental_score >= 6.0 and  # Good fundamental score
             technical_score >= 5.0 and   # Decent technical score
             market_cap > 10000000000  # Large cap (>10B)
         )
-        print(f"    Scores: Fundamental={fundamental_score:.2f}, Technical={technical_score:.2f}, Market Cap={market_cap:,.0f}, Passed={evaluation_passed}")
+        logger.info(f"    Scores: Fundamental={fundamental_score:.2f}, Technical={technical_score:.2f}, Market Cap={market_cap:,.0f}, Passed={evaluation_passed}")
         
         evaluation_results.append({
             "ticker": ticker,
@@ -690,8 +724,8 @@ async def evaluation_node(state: EvaluationState) -> Dict[str, Any]:
         })
     
     passed_stocks = [stock for stock in evaluation_results if stock["evaluation_passed"]]
-    print(f"✅ EvaluationAgent: {len(passed_stocks)} stocks passed evaluation out of {len(evaluation_results)}")
-    print(f"📊 Sample evaluation results: {evaluation_results[:3] if evaluation_results else 'None'}")
+    logger.info(f"✅ EvaluationAgent: {len(passed_stocks)} stocks passed evaluation out of {len(evaluation_results)}")
+    logger.debug(f"📊 Sample evaluation results: {evaluation_results[:3] if evaluation_results else 'None'}")
     
     return {
         "evaluation_results": evaluation_results,
@@ -701,27 +735,27 @@ async def evaluation_node(state: EvaluationState) -> Dict[str, Any]:
 
 async def sentiment_node(state: SentimentState) -> Dict[str, Any]:
     """Sentiment node to analyze news and social media sentiment"""
-    print(f"💭 SentimentAgent: Analyzing sentiment for {len(state['stocks_to_analyze'])} stocks...")
+    logger.info(f"💭 SentimentAgent: Analyzing sentiment for {len(state['stocks_to_analyze'])} stocks...")
     
     sentiment_scores = {}
     
     for ticker in state["stocks_to_analyze"]:
         try:
-            print(f"🔍 Analyzing sentiment for {ticker}...")
+            logger.debug(f"🔍 Analyzing sentiment for {ticker}...")
             
             # For now, use random sentiment scores to test the pipeline
             # In a real implementation, this would fetch news and analyze sentiment
             sentiment_score = random.uniform(4, 9)  # Random sentiment between 4-9
             sentiment_scores[ticker] = round(sentiment_score, 2)
-            print(f"💯 Sentiment score for {ticker}: {sentiment_scores[ticker]:.2f}")
+            logger.info(f"💯 Sentiment score for {ticker}: {sentiment_scores[ticker]:.2f}")
                     
         except Exception as e:
-            print(f"❌ Error analyzing sentiment for {ticker}: {e}")
+            logger.error(f"❌ Error analyzing sentiment for {ticker}: {e}")
             sentiment_scores[ticker] = random.uniform(4, 7)
-            print(f"⚠️ Using fallback sentiment for {ticker}: {sentiment_scores[ticker]:.2f}")
+            logger.warning(f"⚠️ Using fallback sentiment for {ticker}: {sentiment_scores[ticker]:.2f}")
     
-    print(f"✅ SentimentAgent: Completed sentiment analysis for {len(sentiment_scores)} stocks")
-    print(f"📊 Sentiment scores: {sentiment_scores}")
+    logger.info(f"✅ SentimentAgent: Completed sentiment analysis for {len(sentiment_scores)} stocks")
+    logger.debug(f"📊 Sentiment scores: {sentiment_scores}")
     
     return {
         "sentiment_scores": sentiment_scores
@@ -730,8 +764,8 @@ async def sentiment_node(state: SentimentState) -> Dict[str, Any]:
 
 async def ranking_node(state: RankingState) -> Dict[str, Any]:
     """Ranking node to score stocks with weighted algorithm"""
-    print(f"🏆 RankingAgent: Ranking {len(state['evaluated_stocks'])} stocks...")
-    print(f"📊 Available sentiment scores: {len(state.get('sentiment_scores', {}))} stocks")
+    logger.info(f"🏆 RankingAgent: Ranking {len(state['evaluated_stocks'])} stocks...")
+    logger.info(f"📊 Available sentiment scores: {len(state.get('sentiment_scores', {}))} stocks")
     
     weights = state.get("weights", {
         "fundamental": 5,
@@ -769,13 +803,13 @@ async def ranking_node(state: RankingState) -> Dict[str, Any]:
             "revenue_growth": stock.get("revenue_growth", 0)
         })
         
-        print(f"📈 {ticker}: Fundamental={fundamental_score}, Technical={technical_score}, Sentiment={sentiment_score:.2f}, Weighted={weighted_score:.2f}")
+        logger.info(f"📈 {ticker}: Fundamental={fundamental_score}, Technical={technical_score}, Sentiment={sentiment_score:.2f}, Weighted={weighted_score:.2f}")
     
     # Sort by weighted score (descending)
     final_scores.sort(key=lambda x: x["weighted_score"], reverse=True)
     
-    print(f"✅ RankingAgent: Completed ranking of {len(final_scores)} stocks")
-    print(f"🏆 Top 5 ranked stocks: {[stock['ticker'] for stock in final_scores[:5]]}")
+    logger.info(f"✅ RankingAgent: Completed ranking of {len(final_scores)} stocks")
+    logger.info(f"🏆 Top 5 ranked stocks: {[stock['ticker'] for stock in final_scores[:5]]}")
     
     return {
         "final_scores": final_scores
@@ -857,7 +891,7 @@ def create_trading_orchestrator_graph() -> StateGraph:
     # Define orchestrator nodes
     async def initialize_portfolio(state: TradingState) -> Dict[str, Any]:
         """Initialize portfolio building process"""
-        print("🚀 Initializing portfolio building process...")
+        logger.info("🚀 Initializing portfolio building process...")
         return {
             "current_step": "initialized",
             "iteration_count": 0,
@@ -866,7 +900,7 @@ def create_trading_orchestrator_graph() -> StateGraph:
     
     async def scout_stocks(state: TradingState) -> Dict[str, Any]:
         """Scout for stock candidates"""
-        print(f"🔍 Scouting iteration {state['iteration_count'] + 1}...")
+        logger.info(f"🔍 Scouting iteration {state['iteration_count'] + 1}...")
         
         # Determine how many stocks to scout
         remaining_needed = state["target_portfolio_size"] - len(state["evaluated_stocks"])
@@ -889,7 +923,7 @@ def create_trading_orchestrator_graph() -> StateGraph:
     
     async def evaluate_stocks(state: TradingState) -> Dict[str, Any]:
         """Evaluate scouted stocks"""
-        print(f"📊 Evaluating {len(state['scout_candidates'])} candidates...")
+        logger.info(f"📊 Evaluating {len(state['scout_candidates'])} candidates...")
         
         eval_state = EvaluationState(
             stocks_to_evaluate=state["scout_candidates"],
@@ -898,15 +932,15 @@ def create_trading_orchestrator_graph() -> StateGraph:
             technical_metrics={}
         )
         
-        print(f"🔄 Running evaluation agent...")
+        logger.info(f"🔄 Running evaluation agent...")
         result = await eval_agent.run(json.dumps(eval_state))
-        print(f"📋 Evaluation result: {result}")
+        logger.debug(f"📋 Evaluation result: {result}")
         
         eval_result = json.loads(result) if isinstance(result, str) else result
         
         passed_stocks = eval_result.get("passed_stocks", [])
-        print(f"✅ {len(passed_stocks)} stocks passed evaluation")
-        print(f"📋 First few passed stocks: {passed_stocks[:2] if passed_stocks else 'None'}")
+        logger.info(f"✅ {len(passed_stocks)} stocks passed evaluation")
+        logger.debug(f"📋 First few passed stocks: {passed_stocks[:2] if passed_stocks else 'None'}")
         
         # Combine with existing evaluated stocks
         all_evaluated = state["evaluated_stocks"] + passed_stocks
@@ -919,7 +953,7 @@ def create_trading_orchestrator_graph() -> StateGraph:
     async def analyze_sentiment(state: TradingState) -> Dict[str, Any]:
         """Analyze sentiment for evaluated stocks"""
         tickers = [stock["ticker"] for stock in state["evaluated_stocks"]]
-        print(f"💭 Analyzing sentiment for {len(tickers)} stocks...")
+        logger.info(f"💭 Analyzing sentiment for {len(tickers)} stocks...")
         
         sentiment_state = SentimentState(
             stocks_to_analyze=tickers,
@@ -928,13 +962,13 @@ def create_trading_orchestrator_graph() -> StateGraph:
             sentiment_scores={}
         )
         
-        print(f"🎯 Calling sentiment agent with state: {sentiment_state}")
+        logger.debug(f"🎯 Calling sentiment agent with state: {sentiment_state}")
         result = await sentiment_agent.run(json.dumps(sentiment_state))
         sentiment_result = json.loads(result) if isinstance(result, str) else result
         
-        print(f"📊 Sentiment analysis result: {sentiment_result}")
+        logger.debug(f"📊 Sentiment analysis result: {sentiment_result}")
         sentiment_scores = sentiment_result.get("sentiment_scores", {})
-        print(f"💯 Sentiment scores: {sentiment_scores}")
+        logger.info(f"💯 Sentiment scores: {sentiment_scores}")
         
         return {
             "sentiment_scores": sentiment_scores,
@@ -943,8 +977,8 @@ def create_trading_orchestrator_graph() -> StateGraph:
     
     async def rank_stocks(state: TradingState) -> Dict[str, Any]:
         """Rank evaluated stocks"""
-        print(f"🏆 Ranking {len(state['evaluated_stocks'])} stocks...")
-        print(f"📊 Available sentiment scores: {state.get('sentiment_scores', {})}")
+        logger.info(f"🏆 Ranking {len(state['evaluated_stocks'])} stocks...")
+        logger.info(f"📊 Available sentiment scores: {state.get('sentiment_scores', {})}")
         
         ranking_state = RankingState(
             evaluated_stocks=state["evaluated_stocks"],
@@ -953,13 +987,13 @@ def create_trading_orchestrator_graph() -> StateGraph:
             weights={"fundamental": 5, "technical": 3, "sentiment": 2}
         )
         
-        print(f"🎯 Calling ranking agent with state: {len(ranking_state['evaluated_stocks'])} stocks")
+        logger.debug(f"🎯 Calling ranking agent with state: {len(ranking_state['evaluated_stocks'])} stocks")
         result = await ranking_agent.run(json.dumps(ranking_state))
         ranking_result = json.loads(result) if isinstance(result, str) else result
         
-        print(f"📊 Ranking result: {ranking_result}")
+        logger.debug(f"📊 Ranking result: {ranking_result}")
         final_rankings = ranking_result.get("final_scores", [])
-        print(f"💯 Final rankings count: {len(final_rankings)}")
+        logger.info(f"💯 Final rankings count: {len(final_rankings)}")
         
         return {
             "final_rankings": final_rankings,
@@ -968,7 +1002,7 @@ def create_trading_orchestrator_graph() -> StateGraph:
     
     async def build_portfolio(state: TradingState) -> Dict[str, Any]:
         """Build final portfolio"""
-        print("📈 Building final portfolio...")
+        logger.info("📈 Building final portfolio...")
         
         # Select top stocks
         top_stocks = state["final_rankings"][:state["target_portfolio_size"]]
@@ -997,10 +1031,10 @@ def create_trading_orchestrator_graph() -> StateGraph:
         target_size = state["target_portfolio_size"]
         
         if current_size >= target_size:
-            print(f"✅ Portfolio complete with {current_size} stocks")
+            logger.info(f"✅ Portfolio complete with {current_size} stocks")
             return {"current_step": "completed"}
         else:
-            print(f"📈 Need {target_size - current_size} more stocks")
+            logger.info(f"📈 Need {target_size - current_size} more stocks")
             return {
                 "current_step": "needs_more_stocks",
                 "iteration_count": state["iteration_count"] + 1

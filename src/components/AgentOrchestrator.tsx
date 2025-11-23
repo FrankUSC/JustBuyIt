@@ -47,7 +47,7 @@ export const AgentOrchestrator: React.FC = () => {
           addLog('SCOUT', 'No stocks found. Stopping pipeline.', 'error');
           return;
         }
-        addLog('SCOUT', `Found ${found.length} candidate stocks`, 'success');
+        addLog('SCOUT', `Found ${found.length} candidate stocks: ${found.map(stock => stock.ticker).join(', ')}`, 'success');
       }
       
       // Phase 2: Evaluation Agent
@@ -61,7 +61,7 @@ export const AgentOrchestrator: React.FC = () => {
           addLog('EVAL', 'No evaluated stocks passed filters. Stopping pipeline.', 'error');
           return;
         }
-        addLog('EVAL', `Selected top ${selected.length} stocks after filtering`, 'success');
+        addLog('EVAL', `Selected top ${selected.length} stocks after filtering: ${selected.map(stock => stock.ticker).join(', ')}`, 'success');
       }
       
       // Phase 3: Portfolio Manager

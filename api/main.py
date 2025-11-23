@@ -7,6 +7,7 @@ import os
 from typing import List, Dict, Any
 import logging
 from dotenv import load_dotenv
+import sys
 try:
     from spoon_ai.memory.short_term_manager import ShortTermMemoryManager
     from spoon_ai.schema import Message
@@ -31,6 +32,17 @@ from agents import (
 )
 
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+def configure_logging():
+    root = logging.getLogger()
+    if not any(isinstance(h, logging.StreamHandler) for h in root.handlers):
+        h = logging.StreamHandler(sys.stdout)
+        h.setLevel(logging.DEBUG)
+        h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s [%(name)s] %(message)s"))
+        root.addHandler(h)
+    root.setLevel(logging.DEBUG)
+    for name in ("uvicorn", "uvicorn.error", "uvicorn.access", "fastapi"):
+        logging.getLogger(name).setLevel(logging.DEBUG)
+configure_logging()
 app = FastAPI(title="Pocket Hedge Fund API", version="1.0.0")
 
 # Initialize SpoonAI agents
@@ -953,4 +965,4 @@ async def get_agents_status():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    uvicorn.run(app, host="0.0.0.0", port=8001, log_level="debug")
