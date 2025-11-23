@@ -50,6 +50,20 @@ def configure_logging():
         logging.getLogger(name).setLevel(logging.DEBUG)
 configure_logging()
 app = FastAPI(title="Just Buy It API", version="1.0.0")
+origins_env = os.getenv("CORS_ORIGINS", "")
+origins = [o.strip() for o in origins_env.split(",") if o.strip()] or [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_origin_regex=os.getenv("CORS_ORIGIN_REGEX", r"https://.*\.vercel\.app|https://.*\.onrender\.com"),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"]
+)
 INMEM_STOCK_DATA: Dict[str, List[Dict[str, Any]]] = {}
 
 # Initialize SpoonAI agents
