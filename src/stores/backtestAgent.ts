@@ -46,8 +46,11 @@ export const useBacktestAgent = create<BacktestAgentState>((set, get) => ({
       const end = new Date(endDate);
       const totalMonths = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
       const stepMonths = get().stepMonths;
-      const totalSteps = Math.ceil(totalMonths / stepMonths);
-      
+      const totalSteps = Math.ceil(totalMonths / stepMonths) + 1;
+      // console.log("totalMonths", totalMonths);
+      // console.log("totalSteps", totalSteps);  
+      // console.log("stepMonths", stepMonths);
+
       set({ totalSteps });
       
       const results: BacktestResult[] = [];

@@ -2,31 +2,57 @@ import React from 'react';
 import { GlassCard } from './GlassCard';
 import { GradientText } from './GradientText';
 import { TrendingUp, DollarSign, Activity } from 'lucide-react';
-import { useTradingStore } from '../stores/trading';
+import { usePortfolioManager } from '../stores/portfolioManager';
+import { useBacktestAgent } from '../stores/backtestAgent';
 import { motion } from 'framer-motion';
 
 export const HeroMetrics: React.FC = () => {
-  const { totalAssets, alphaGenerated } = useTradingStore();
+  const { portfolio, total_value, cash_remaining } = usePortfolioManager();
+  const { results: backtestResults } = useBacktestAgent();
+
+  let endingBalance = (total_value || 0) + (cash_remaining || 0);
+  if (backtestResults && backtestResults.length > 1) {
+    const first = backtestResults[0];
+    const last = backtestResults[backtestResults.length - 1];
+    const p0 = first?.portfolio_value || 100;
+    const p1 = last?.portfolio_value || p0;
+    endingBalance = 1000000 * (p1 / p0);
+  }
+  const activePositions = portfolio.length;
+
+  let portfolioReturn = 0;
+  let spyReturn = 0;
+  if (backtestResults && backtestResults.length > 0) {
+    const first = backtestResults[0];
+    const last = backtestResults[backtestResults.length - 1];
+    const p0 = first?.portfolio_value || 100;
+    const p1 = last?.portfolio_value || p0;
+    const s0 = first?.spy_value || 100;
+    const s1 = last?.spy_value || s0;
+    portfolioReturn = p0 > 0 ? (p1 / p0 - 1) : 0;
+    spyReturn = s0 > 0 ? (s1 / s0 - 1) : 0;
+  }
+  const alphaGenerated = (portfolioReturn - spyReturn) * 100;
 
   const metrics = [
     {
       label: 'Total Assets',
-      value: `$${(totalAssets / 1000000).toFixed(2)}M`,
-      change: '+12.5%',
+      value: `$${(endingBalance / 1000000).toFixed(2)}M`,
+      change: `${portfolioReturn >= 0 ? '+' : ''}${(portfolioReturn * 100).toFixed(1)}%`,
       icon: DollarSign,
-      positive: true
+      positive: portfolioReturn >= 0
     },
     {
       label: 'Alpha Generated',
-      value: `${alphaGenerated}%`,
-      change: '+2.3% vs SPY',
+      value: `${alphaGenerated.toFixed(1)}%`,
+      change: `${alphaGenerated >= 0 ? '+' : ''}${alphaGenerated.toFixed(1)}% vs SPY`,
       icon: TrendingUp,
-      positive: true
+      positive: alphaGenerated >= 0
     },
     {
       label: 'Active Positions',
-      value: '24',
-      change: '8 sectors',
+      value: `${activePositions}`,
+      change: `${activePositions} active`,
       icon: Activity,
       positive: true
     }
@@ -60,6 +86,7 @@ export const HeroMetrics: React.FC = () => {
                 <GradientText 
                   text={metric.value} 
                   className="text-4xl font-bold tracking-tight"
+                  negative={metric.label === 'Alpha Generated' ? (alphaGenerated < 0) : (metric.label === 'Total Assets' ? (endingBalance < 0) : false)}
                 />
               </div>
             </GlassCard>

@@ -38,10 +38,12 @@ export const PortfolioChart: React.FC<PortfolioChartProps> = ({ data, height = 4
 
   const monthly = React.useMemo(() => {
     if (!trimmed.length) return [] as typeof trimmed;
-    const lastDate = new Date(trimmed[trimmed.length - 1].date);
+    const lastDate = new Date();
+    lastDate.setDate(1);
+    lastDate.setHours(0, 0, 0, 0);
     // Build 13 month targets from last month backward
     const monthTargets: Date[] = [];
-    for (let i = 12; i >= 0; i--) {
+    for (let i = 12; i >= -1; i--) {
       const dt = new Date(lastDate);
       dt.setMonth(lastDate.getMonth() - i);
       dt.setDate(1);

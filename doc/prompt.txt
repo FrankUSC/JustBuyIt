@@ -34,7 +34,7 @@ If Missing: Trigger a Bulk Download of the top 50 S&P 500 stocks for the last 10
 Storage: Store as a localized Parquet/DuckDB file for instant querying (0ms latency).
 
 Phase 1: The "Scout Agent" (Query Generator)
-UI: User types a natural language goal: "Find me high growth tech stocks that are currently not overbought."
+UI: User types a natural language goal: "Find growth stocks that has small market cap."
 
 Logic: LLM translates this to a Pandas query against the local DB:
 

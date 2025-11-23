@@ -8,11 +8,12 @@ import { useEvaluationAgent } from '../stores/evaluationAgent';
 import { usePortfolioManager } from '../stores/portfolioManager';
 import { useBacktestAgent } from '../stores/backtestAgent';
 import { PortfolioChart } from './PortfolioChart';
+import { HeroMetrics } from './HeroMetrics';
 import { ProgressBar } from './ProgressBar';
 import { Search, Play, TrendingUp, Activity } from 'lucide-react';
 
 export const AgentOrchestrator: React.FC = () => {
-  const [searchQuery, setSearchQuery] = useState('Find me high growth tech stocks that are currently not overbought');
+  const [searchQuery, setSearchQuery] = useState('Find growth stocks that has small market cap');
   const [isRunning, setIsRunning] = useState(false);
   const [currentPhase, setCurrentPhase] = useState(0);
   const [progressPercent, setProgressPercent] = useState(0);
@@ -123,7 +124,7 @@ export const AgentOrchestrator: React.FC = () => {
             <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input
               type="text"
-              placeholder="Find me high growth tech stocks that are currently not overbought..."
+              placeholder="Find growth stocks that has small market cap..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && runFullPipeline()}
@@ -212,37 +213,52 @@ export const AgentOrchestrator: React.FC = () => {
                 const s1 = last?.spy_value || s0;
                 const totalRet = p0 > 0 ? (p1 / p0 - 1) : 0;
                 const spyRet = s0 > 0 ? (s1 / s0 - 1) : 0;
-                const alpha = totalRet - spyRet;
                 let peak = p0;
                 let ddMin = 0;
+                
                 for (const r of backtestResults) {
                   const v = r.portfolio_value || p0;
                   if (v > peak) peak = v;
                   const dd = peak > 0 ? (v / peak - 1) : 0;
                   if (dd < ddMin) ddMin = dd;
                 }
+                let spyPeak = s0;
+                let spyDdMin = 0;
+                for (const r of backtestResults) {
+                  const sv = r.spy_value || s0;
+                  if (sv > spyPeak) spyPeak = sv;
+                  const sdd = spyPeak > 0 ? (sv / spyPeak - 1) : 0;
+                  if (sdd < spyDdMin) spyDdMin = sdd;
+                }
                 const fmt = (x: number) => `${x >= 0 ? '+' : ''}${(x * 100).toFixed(1)}%`;
                 const totalStr = fmt(totalRet);
-                const alphaStr = fmt(alpha);
                 const ddStr = `${(ddMin * 100).toFixed(1)}%`;
+                const spyTotalStr = fmt(spyRet);
+                const spyDdStr = `${(spyDdMin * 100).toFixed(1)}%`;
                 return (
-                  <div className="grid grid-cols-3 gap-6">
+                  <div className="grid grid-cols-4 gap-6">
                     <div className="text-center">
                       <p className="text-slate-400 text-sm mb-2">Total Return</p>
-                      <GradientText text={totalStr} className="text-2xl font-bold" />
-                    </div>
-                    <div className="text-center">
-                      <p className="text-slate-400 text-sm mb-2">Alpha Generated</p>
-                      <GradientText text={alphaStr} className="text-2xl font-bold" />
+                      <GradientText text={totalStr} className="text-2xl font-bold" negative={totalRet < 0} />
                     </div>
                     <div className="text-center">
                       <p className="text-slate-400 text-sm mb-2">Max Drawdown</p>
                       <span className="text-2xl font-bold text-red-400">{ddStr}</span>
                     </div>
+                    <div className="text-center">
+                      <p className="text-slate-400 text-sm mb-2">S&P 500 Return</p>
+                      <span className="text-2xl font-bold text-yellow-400">{spyTotalStr}</span>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-slate-400 text-sm mb-2">S&P Max Drawdown</p>
+                      <span className="text-2xl font-bold text-yellow-400">{spyDdStr}</span>
+                    </div>
                   </div>
                 );
               })()}
             </GlassCard>
+
+            <HeroMetrics />
           </motion.div>
         )}
       </AnimatePresence>

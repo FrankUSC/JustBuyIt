@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Sidebar } from './components/Sidebar';
-import { HeroMetrics } from './components/HeroMetrics';
+// import { HeroMetrics } from './components/HeroMetrics';
 import { AgentStream } from './components/AgentStream';
 import { GlassCard } from './components/GlassCard';
 import { GradientText } from './components/GradientText';
@@ -43,7 +43,7 @@ function App() {
               <p className="text-slate-400 text-lg">Autonomous AI Quantitative Trading Platform</p>
             </motion.div>
 
-            {/* Agent Orchestrator */}
+            {/* Dashboard */}
             {activeView === 'dashboard' && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
@@ -183,9 +183,7 @@ function App() {
               </motion.div>
             )}
 
-            {activeView === 'spoonai' && (
-              <HeroMetrics />
-            )}
+            {activeView === 'spoonai' && null}
 
             
           </div>
