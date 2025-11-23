@@ -11,12 +11,17 @@ import httpx
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 import uuid
+import os
+from dotenv import load_dotenv
+
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 try:
     from spoon_ai.agents.toolcall import ToolCallAgent
     from spoon_ai.chat import ChatBot
     from spoon_ai.tools import ToolManager
     from spoon_ai.tools.base import BaseTool
+    from spoon_ai.schema import Message
     SPOON_AVAILABLE = True
     print("✅ SpoonAI components loaded successfully")
 except Exception:
@@ -24,6 +29,7 @@ except Exception:
     ChatBot = object  # type: ignore
     ToolManager = object  # type: ignore
     BaseTool = object  # type: ignore
+    Message = dict  # type: ignore
     SPOON_AVAILABLE = False
     print("⚠️ SpoonAI components not available")
 
@@ -319,15 +325,117 @@ if SPOON_AVAILABLE:
     class SpoonScoutAgent(ToolCallAgent):
         def __init__(self):
             super().__init__(
-                llm=ChatBot(llm_provider="gemini", model_name="gpt-4.1"),
+                llm=ChatBot(llm_provider="gemini", model_name=os.getenv("GEMINI_MODEL", "models/gemini-1.5-pro-001")),
                 available_tools=ToolManager([SearchStocksTool()])
             )
             print("✅ SpoonScoutAgent initialized with Gemini LLM")
         
+        def _interpret_query_to_criteria(self, query: str, default_limit: int = 30) -> Dict[str, Any]:
+            """Interpret a natural language query into search criteria.
+            Uses simple heuristics as fallback when LLM tooling/config is unavailable."""
+            q = (query or "").lower()
+            criteria: Dict[str, Any] = {"limit": default_limit}
+            if any(k in q for k in ["tech", "technology"]):
+                criteria["sector"] = "Technology"
+            import re
+            m_growth = re.search(r"(growth|revenue\s*growth)[^0-9]*([0-9]{1,2})%", q)
+            if m_growth:
+                criteria["min_revenue_growth"] = float(m_growth.group(2))
+            elif "growth" in q:
+                criteria["min_revenue_growth"] = 10.0
+            m_rsi = re.search(r"rsi[^0-9]*([0-9]{1,2})", q)
+            if m_rsi:
+                criteria["max_rsi"] = float(m_rsi.group(1))
+            elif any(k in q for k in ["beaten down", "undervalued", "oversold"]):
+                criteria["max_rsi"] = 50.0
+            # Market cap parsing (e.g., 50B, 0.5T, billion/trillion words)
+            m_cap_b = re.search(r"([0-9]+)\s*[bB](?:illion)?", q)
+            m_cap_t = re.search(r"([0-9]+(?:\.[0-9]+)?)\s*[tT](?:rillion)?", q)
+            if m_cap_t:
+                criteria["min_market_cap"] = float(m_cap_t.group(1)) * 1_000_000_000_000
+            elif m_cap_b:
+                criteria["min_market_cap"] = float(m_cap_b.group(1)) * 1_000_000_000
+            elif "large cap" in q or ("large" in q and ("tech" in q or "technology" in q)):
+                criteria["min_market_cap"] = 10_000_000_000
+            return criteria
+
+        async def _llm_generate_criteria(self, query: str, default_limit: int = 30) -> Dict[str, Any]:
+            if not query:
+                return {}
+            prompt = (
+                "Based on the description of the Query, please generate a stock screener criteria with numeric filters and return ONLY JSON with keys: "
+                "min_market_cap (USD number), max_rsi (number), min_revenue_growth (percent number). "
+                "Query: " + query
+            )
+            try:
+                result_text = None
+                print(f"🔍 Prompt: {prompt}")
+                if hasattr(self.llm, "ask"):
+                    try:
+                        msgs = [Message(role="user", content=prompt)]  # type: ignore
+                    except Exception:
+                        msgs = [{"role": "user", "content": prompt}]
+                    rt = self.llm.ask(msgs)
+                    if asyncio.iscoroutine(rt):
+                        result_text = await rt
+                    else:
+                        result_text = rt
+                elif hasattr(self.llm, "chat"):
+                    try:
+                        sys = Message(role="system", content="Return JSON only.")  # type: ignore
+                        usr = Message(role="user", content=prompt)  # type: ignore
+                        payload = [sys, usr]
+                    except Exception:
+                        payload = [
+                            {"role": "system", "content": "Return JSON only."},
+                            {"role": "user", "content": prompt}
+                        ]
+                    result = self.llm.chat(payload)
+                    if asyncio.iscoroutine(result):
+                        result = await result
+                    if isinstance(result, dict) and "content" in result:
+                        result_text = result["content"]
+                    else:
+                        result_text = str(result)
+                else:
+                    print(f"❌ No result_text generated, self.llm: {self.llm}")
+                    return {}
+                if not result_text:
+                    print(f"❌ No result_text generated: {result_text}")
+                    return {}
+                
+                import re
+                m = re.search(r"\{[\s\S]*\}", result_text)
+                text = m.group(0) if m else result_text
+                data = json.loads(text)
+                out: Dict[str, Any] = {"limit": default_limit}
+                if isinstance(data, dict):
+                    if "min_market_cap" in data and data["min_market_cap"] is not None:
+                        out["min_market_cap"] = float(data["min_market_cap"])
+                    if "max_rsi" in data and data["max_rsi"] is not None:
+                        out["max_rsi"] = float(data["max_rsi"])
+                    if "min_revenue_growth" in data and data["min_revenue_growth"] is not None:
+                        out["min_revenue_growth"] = float(data["min_revenue_growth"])
+                return out
+            except Exception as e:
+                print(f"❌ Error in _llm_generate_criteria: {e}")
+                import traceback
+                traceback.print_exc()
+                return {}
+
         async def run(self, request: str) -> str:  # type: ignore
             state = json.loads(request) if isinstance(request, str) else request
+            natural_query = state.get("natural_query", "")
             criteria = state.get("search_criteria", {})
             limit = state.get("stock_count", criteria.get("limit", 20))
+            print(f"natural_query: {natural_query}")
+            print(f"criteria: {criteria}")
+            criteria = await self._llm_generate_criteria(natural_query, default_limit=limit)
+            print(f"generated: {criteria}")
+            if natural_query and not criteria:
+                criteria = self._interpret_query_to_criteria(natural_query, default_limit=limit)
+                print(f"criteria created: {criteria}")
+            
             params = {
                 "limit": limit,
                 "min_market_cap": criteria.get("min_market_cap", 0),
@@ -340,7 +448,7 @@ if SPOON_AVAILABLE:
     class SpoonEvaluationAgent(ToolCallAgent):
         def __init__(self):
             super().__init__(
-                llm=ChatBot(llm_provider="gemini", model_name="gpt-4.1"),
+                llm=ChatBot(llm_provider="gemini", model_name=os.getenv("GEMINI_MODEL", "models/gemini-1.5-pro-001")),
                 available_tools=ToolManager([EvaluateStocksTool()])
             )
         async def run(self, request: str) -> str:  # type: ignore
@@ -352,7 +460,7 @@ if SPOON_AVAILABLE:
     class SpoonSentimentAgent(ToolCallAgent):
         def __init__(self):
             super().__init__(
-                llm=ChatBot(llm_provider="gemini", model_name="gpt-4.1"),
+                llm=ChatBot(llm_provider="gemini", model_name=os.getenv("GEMINI_MODEL", "models/gemini-1.5-pro-001")),
                 available_tools=ToolManager([SentimentTool()])
             )
             print("✅ SpoonSentimentAgent initialized with Gemini LLM")
@@ -365,7 +473,7 @@ if SPOON_AVAILABLE:
     class SpoonRankingAgent(ToolCallAgent):
         def __init__(self):
             super().__init__(
-                llm=ChatBot(llm_provider="gemini", model_name="gpt-4.1"),
+                llm=ChatBot(llm_provider="gemini", model_name=os.getenv("GEMINI_MODEL", "models/gemini-1.5-pro-001")),
                 available_tools=ToolManager([RankTool()])
             )
             print("✅ SpoonRankingAgent initialized with Gemini LLM")
@@ -389,6 +497,7 @@ class TradingState(TypedDict):
     current_step: str
     iteration_count: int
     target_portfolio_size: int
+    natural_query: str
 
 
 class ScoutState(TypedDict):
@@ -396,6 +505,7 @@ class ScoutState(TypedDict):
     candidates: List[Dict[str, Any]]
     search_criteria: Dict[str, Any]
     stock_count: int
+    natural_query: str
 
 
 class EvaluationState(TypedDict):
@@ -739,7 +849,7 @@ def create_trading_orchestrator_graph() -> StateGraph:
     graph = StateGraph(TradingState)
     
     # Create sub-graph agents
-    scout_agent = GraphAgent("scout", create_scout_graph())
+    scout_agent = create_scout_agent()
     eval_agent = GraphAgent("evaluation", create_evaluation_graph())
     sentiment_agent = GraphAgent("sentiment", create_sentiment_graph())
     ranking_agent = GraphAgent("ranking", create_ranking_graph())
@@ -764,11 +874,12 @@ def create_trading_orchestrator_graph() -> StateGraph:
         
         scout_state = ScoutState(
             candidates=[],
-            search_criteria={"limit": scout_count, "min_market_cap": 10000000000},  # Large cap focus
+            search_criteria={},
             stock_count=scout_count
         )
+        state_payload = {**scout_state, "natural_query": state.get("natural_query", "")}  # type: ignore
         
-        result = await scout_agent.run(json.dumps(scout_state))
+        result = await scout_agent.run(json.dumps(state_payload))
         scout_result = json.loads(result) if isinstance(result, str) else result
         
         return {

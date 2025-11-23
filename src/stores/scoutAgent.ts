@@ -31,31 +31,19 @@ export const useScoutAgent = create<ScoutAgentState>((set, get) => ({
     set({ isLoading: true, query });
     
     try {
-      // Parse natural language query
-      const params = new URLSearchParams();
-      
-      if (query.toLowerCase().includes('tech') || query.toLowerCase().includes('technology')) {
-        params.append('sector', 'Technology');
-      }
-      
-      if (query.toLowerCase().includes('growth')) {
-        params.append('min_revenue_growth', '15');
-      }
-      
-      if (query.toLowerCase().includes('beaten down') || query.toLowerCase().includes('undervalued')) {
-        params.append('max_rsi', '50');
-      }
-      
-      params.append('limit', '30');
-      
-      const response = await fetch(`http://localhost:8001/api/stocks/search?${params}`);
+      const response = await fetch('http://localhost:8001/api/agents/scout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, stock_count: 30 })
+      });
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
-      const results = await response.json();
-      set({ results, isLoading: false });
+      const payload = await response.json();
+      const candidates = Array.isArray(payload) ? payload : (payload.candidates || []);
+      set({ results: candidates, isLoading: false });
       
     } catch (error) {
       console.error('Scout agent search failed:', error);

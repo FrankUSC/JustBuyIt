@@ -6,6 +6,7 @@ import uuid
 import os
 from typing import List, Dict, Any
 import logging
+from dotenv import load_dotenv
 try:
     from spoon_ai.memory.short_term_manager import ShortTermMemoryManager
     from spoon_ai.schema import Message
@@ -29,6 +30,7 @@ from agents import (
     TradingState
 )
 
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 app = FastAPI(title="Pocket Hedge Fund API", version="1.0.0")
 
 # Initialize SpoonAI agents
@@ -696,7 +698,8 @@ async def build_portfolio_with_agents():
             portfolio=[],
             current_step="initialized",
             iteration_count=0,
-            target_portfolio_size=20
+            target_portfolio_size=20,
+            natural_query=""
         )
         
         print("🚀 Starting multi-agent portfolio building process...")
@@ -723,26 +726,33 @@ async def build_portfolio_with_agents():
         raise HTTPException(status_code=500, detail=f"Portfolio building failed: {str(e)}")
 
 @app.post("/api/agents/scout")
-async def scout_stocks(stock_count: int = 20, min_market_cap: float = 10000000000):
-    """Scout for stock candidates using ScoutAgent"""
+async def scout_stocks(request: Dict[str, Any]):
+    """Scout for stock candidates using ScoutAgent with optional natural language query"""
     try:
         if not scout_agent:
             raise HTTPException(status_code=503, detail="Scout agent not initialized")
         
         from agents import ScoutState
         
+        query = request.get("query", "")
+        stock_count = int(request.get("stock_count", 20))
+        explicit_criteria = request.get("criteria", {})
+        
         scout_state = ScoutState(
             candidates=[],
-            search_criteria={"limit": stock_count, "min_market_cap": min_market_cap},
+            search_criteria=explicit_criteria,
             stock_count=stock_count
         )
+        # Pass natural query for LLM interpretation inside agent
+        state_payload = {**scout_state, "natural_query": query}  # type: ignore
         
-        result = await scout_agent.run(json.dumps(scout_state))
+        result = await scout_agent.run(json.dumps(state_payload))
         scout_result = json.loads(result) if isinstance(result, str) else result
         
         return {
             "status": "success",
             "candidates": scout_result.get("candidates", []),
+            "criteria": scout_result.get("search_criteria", {}),
             "total_found": len(scout_result.get("candidates", [])),
             "timestamp": datetime.now().isoformat()
         }

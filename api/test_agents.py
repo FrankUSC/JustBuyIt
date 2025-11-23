@@ -18,7 +18,8 @@ async def test_scout_agent():
         scout_state = ScoutState(
             candidates=[],
             search_criteria={"limit": 5, "min_market_cap": 10000000000},
-            stock_count=5
+            stock_count=5,
+            natural_query="Find 5 large tech companies with high revenue growth",
         )
         
         print(f"📝 Initial state: {json.dumps(scout_state, indent=2)}")
