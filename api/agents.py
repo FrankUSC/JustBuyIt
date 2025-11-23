@@ -245,27 +245,25 @@ if SPOON_AVAILABLE:
         }
         async def execute(self, stocks: List[Dict[str, Any]]) -> Dict[str, Any]:
             evaluation_results = []
+            logger.info(f"Evaluating {len(stocks)} stocks")
+            fundamental_scores = await llm_evaluate_fundamentals(stocks)
             for stock in stocks:
                 ticker = stock["ticker"]
                 detailed = await fetch_stock_data_from_api(ticker)
-                fundamental = random.uniform(5, 8)
-                if stock.get("revenue_growth", 0) > 10:
-                    fundamental += 1.5
-                if stock.get("market_cap", 0) > 10000000000:
-                    fundamental += 1
-                technical = 5
+                fundamental = fundamental_scores.get(ticker, 50)
+                technical = 50
                 if detailed["rsi"] < 30:
-                    technical += 2
+                    technical += 20
                 elif detailed["rsi"] > 70:
-                    technical -= 2
+                    technical -= 20
                 if detailed["current_price"] > detailed["ma_20"]:
-                    technical += 1
+                    technical += 10
                 if detailed["ma_20"] > detailed["ma_50"]:
-                    technical += 2
-                fundamental = max(0, min(10, fundamental))
-                technical = max(0, min(10, technical))
+                    technical += 20
+                fundamental = max(0, min(100, fundamental))
+                technical = max(0, min(100, technical))
                 evaluation_passed = (
-                    fundamental >= 6.0 and technical >= 5.0 and stock.get("market_cap", 0) > 10000000000
+                    fundamental >= 60.0 and technical >= 50.0
                 )
                 evaluation_results.append({
                     "ticker": ticker,
@@ -280,6 +278,99 @@ if SPOON_AVAILABLE:
                 })
             passed = [s for s in evaluation_results if s["evaluation_passed"]]
             return {"evaluation_results": evaluation_results, "passed_stocks": passed}
+
+    async def llm_evaluate_fundamentals(stocks: List[Dict[str, Any]]) -> Dict[str, int]:
+        try:
+            payload = []
+            for s in stocks:
+                d = {
+                    "ticker": s.get("ticker"),
+                    "sector": s.get("sector"),
+                    "market_cap": s.get("market_cap"),
+                    "revenue_growth": s.get("revenue_growth"),
+                    "current_price": s.get("current_price"),
+                    "rsi": s.get("rsi") or s.get("current_rsi"),
+                    "ma_20": s.get("ma_20"),
+                    "ma_50": s.get("ma_50"),
+                    "volume": s.get("volume"),
+                }
+                payload.append(d)
+            prompt = (
+                "Given the following detailed stock data, research and evaluate the fundamentals of each stock. "
+                "Return ONLY a JSON object mapping ticker to an integer score from 1 to 100 representing fundamental quality. "
+                "Use sector context, market_cap, revenue_growth, margins if implied, stability, balance sheet, cache flow, profitability and quality. "
+                "Stocks: " + json.dumps(payload)
+            )
+            logger.debug(f"🔍 Fundamentals prompt length: {len(prompt)}")
+            if SPOON_AVAILABLE:
+                try:
+                    llm = ChatBot(llm_provider="gemini", model_name=os.getenv("GEMINI_MODEL", "models/gemini-1.5-pro-001"))
+                    result_text = None
+                    if hasattr(llm, "ask"):
+                        try:
+                            msgs = [Message(role="user", content=prompt)]  
+                        except Exception:
+                            msgs = [{"role": "user", "content": prompt}]
+                        rt = llm.ask(msgs)
+                        result_text = await rt if asyncio.iscoroutine(rt) else rt
+                    elif hasattr(llm, "chat"):
+                        try:
+                            sysm = Message(role="system", content="Return JSON only.")  
+                            usrm = Message(role="user", content=prompt)  
+                            payload_msgs = [sysm, usrm]
+                        except Exception:
+                            payload_msgs = [
+                                {"role": "system", "content": "Return JSON only."},
+                                {"role": "user", "content": prompt},
+                            ]
+                        res = llm.chat(payload_msgs)
+                        res = await res if asyncio.iscoroutine(res) else res
+                        result_text = res["content"] if isinstance(res, dict) and "content" in res else str(res)
+                    else:
+                        logger.warning("❌ LLM interface not available")
+                        result_text = None
+                    if not result_text:
+                        logger.warning("❌ No LLM result for fundamentals evaluation")
+                        raise RuntimeError("no_llm_result")
+                    import re
+                    m = re.search(r"\{[\s\S]*\}", result_text)
+                    text = m.group(0) if m else result_text
+                    data = json.loads(text)
+                    out: Dict[str, int] = {}
+                    if isinstance(data, dict):
+                        for k, v in data.items():
+                            try:
+                                score = int(round(float(v)))
+                            except Exception:
+                                score = 50
+                            score = max(1, min(100, score))
+                            out[str(k)] = score
+                    logger.debug(f"📊 Fundamentals scores received: {out}")
+                    return out
+                except Exception as e:
+                    logger.error(f"❌ LLM fundamentals evaluation error: {e}")
+            else:
+                logger.warning("❌ No LLM result for fundamentals evaluation, fallback to basic scoring")
+            out: Dict[str, int] = {}
+            for s in payload:
+                base = 50.0
+                rg = s.get("revenue_growth") or 0.0
+                mc = s.get("market_cap") or 0.0
+                rsi = s.get("rsi") or 50.0
+                base += (float(rg) - 5.0) * 2.0
+                if mc > 100_000_000_000:
+                    base += 10
+                elif mc > 10_000_000_000:
+                    base += 5
+                if rsi < 30:
+                    base += 2
+                score = int(max(1, min(100, round(base))))
+                out[str(s.get("ticker"))] = score
+            logger.debug(f"📊 Fundamentals scores fallback: {out}")
+            return out
+        except Exception as e:
+            logger.error(f"❌ Fundamentals evaluation failed: {e}")
+            return {}
 
     class SentimentTool(BaseTool):
         name: str = "sentiment"

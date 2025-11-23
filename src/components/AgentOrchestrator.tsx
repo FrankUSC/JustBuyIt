@@ -12,7 +12,7 @@ import { ProgressBar } from './ProgressBar';
 import { Search, Play, TrendingUp, Activity } from 'lucide-react';
 
 export const AgentOrchestrator: React.FC = () => {
-  const [searchQuery, setSearchQuery] = useState('Find me aggressive growth tech stocks that are currently beaten down');
+  const [searchQuery, setSearchQuery] = useState('Find me high growth tech stocks that are currently not overbought');
   const [isRunning, setIsRunning] = useState(false);
   const [currentPhase, setCurrentPhase] = useState(0);
   
@@ -113,7 +113,7 @@ export const AgentOrchestrator: React.FC = () => {
             <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input
               type="text"
-              placeholder="Find me aggressive growth tech stocks that are currently beaten down..."
+              placeholder="Find me high growth tech stocks that are currently not overbought..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && runFullPipeline()}
