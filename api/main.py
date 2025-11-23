@@ -44,6 +44,7 @@ def configure_logging():
         logging.getLogger(name).setLevel(logging.DEBUG)
 configure_logging()
 app = FastAPI(title="Just Buy It API", version="1.0.0")
+INMEM_STOCK_DATA: Dict[str, List[Dict[str, Any]]] = {}
 
 # Initialize SpoonAI agents
 trading_orchestrator = None
@@ -80,6 +81,15 @@ app.add_middleware(
     expose_headers=["*"]
 )
 
+def preload_stock_data():
+    global INMEM_STOCK_DATA
+    try:
+        INMEM_STOCK_DATA = get_stock_data()
+    except Exception:
+        INMEM_STOCK_DATA = {}
+
+preload_stock_data()
+
 MEMORY_THREADS: Dict[str, List[Any]] = {}
 MEMORY_MANAGERS: Dict[str, Any] = {}
 
@@ -91,6 +101,7 @@ def _ensure_thread(thread_id: str):
 
 # Complete S&P 500 companies with sectors
 SP500_STOCKS = [
+    {'ticker': 'SPY', 'sector': 'Index'},
     {'ticker': 'AAPL', 'sector': 'Technology'},
     {'ticker': 'MSFT', 'sector': 'Technology'},
     {'ticker': 'GOOGL', 'sector': 'Technology'},
@@ -663,34 +674,102 @@ async def get_stock_history(
     ticker: str,
     period: str = "1y"
 ) -> List[Dict[str, Any]]:
-    """Get historical price data for a stock"""
+    logging.info(f"Fetching history for {ticker} with period {period}")
+    if ticker in INMEM_STOCK_DATA and INMEM_STOCK_DATA[ticker]:
+        stock_data = INMEM_STOCK_DATA[ticker][-252:] if len(INMEM_STOCK_DATA[ticker]) > 252 else INMEM_STOCK_DATA[ticker]
+        return [
+            {
+                'date': item['date'],
+                'open': item['open'],
+                'high': item['high'],
+                'low': item['low'],
+                'close': item['close'],
+                'volume': item['volume'],
+                'rsi': item['rsi'],
+                'ma_20': item['ma_20'],
+                'ma_50': item['ma_50']
+            }
+            for item in stock_data
+        ]
+    # Prefer live fetch to avoid loading entire DB
+    logging.info(f"Fetching history for {ticker} with period {period} from Yahoo Finance")
+    try:
+        stock_obj = yf.Ticker(ticker)
+        hist = stock_obj.history(period=period)
+        if hist is None or hist.empty:
+            alt = yf.download(ticker, period=period, progress=False)
+            hist = alt if alt is not None else pd.DataFrame()
+        if not hist.empty:
+            prices: List[float] = []
+            live = []
+            for date, row in hist.iterrows():
+                close_val = row['Close'] if 'Close' in row else (row['Adj Close'] if 'Adj Close' in row else None)
+                open_val = row['Open'] if 'Open' in row else close_val
+                high_val = row['High'] if 'High' in row else close_val
+                low_val = row['Low'] if 'Low' in row else close_val
+                if close_val is None:
+                    continue
+                prices.append(float(close_val))
+                rsi = calculate_rsi(prices)
+                ma_20 = calculate_ma(prices, 20)
+                ma_50 = calculate_ma(prices, 50)
+                vol_value = row['Volume'] if 'Volume' in row else 0
+                if pd.isna(vol_value):
+                    vol_value = 0
+                live.append({
+                    'date': date.isoformat(),
+                    'open': round(float(open_val), 2),
+                    'high': round(float(high_val), 2),
+                    'low': round(float(low_val), 2),
+                    'close': round(float(close_val), 2),
+                    'volume': int(vol_value),
+                    'rsi': round(rsi, 2),
+                    'ma_20': round(ma_20, 2),
+                    'ma_50': round(ma_50, 2)
+                })
+            return live
+    except Exception:
+        pass
+
+    # Fall back to local database if available
     try:
         data = get_stock_data()
-        
-        if ticker not in data or not data[ticker]:
-            raise HTTPException(status_code=404, detail=f"Stock {ticker} not found")
-        
-        # Return last 252 trading days (about 1 year)
-        stock_data = data[ticker][-252:] if len(data[ticker]) > 252 else data[ticker]
-        
-        history = []
-        for item in stock_data:
-            history.append({
-                "date": item['date'],
-                "open": item['open'],
-                "high": item['high'],
-                "low": item['low'],
-                "close": item['close'],
-                "volume": item['volume'],
-                "rsi": item['rsi'],
-                "ma_20": item['ma_20'],
-                "ma_50": item['ma_50']
-            })
-        
-        return history
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch history: {str(e)}")
+        if ticker in data and data[ticker]:
+            stock_data = data[ticker][-252:] if len(data[ticker]) > 252 else data[ticker]
+            return [
+                {
+                    'date': item['date'],
+                    'open': item['open'],
+                    'high': item['high'],
+                    'low': item['low'],
+                    'close': item['close'],
+                    'volume': item['volume'],
+                    'rsi': item['rsi'],
+                    'ma_20': item['ma_20'],
+                    'ma_50': item['ma_50']
+                }
+                for item in stock_data
+            ]
+    except Exception:
+        pass
+
+    # Last resort: generated fallback
+    fb = generate_fallback_data(ticker, 'Unknown')
+    trimmed = fb[-252:] if len(fb) > 252 else fb
+    return [
+        {
+            'date': it['date'],
+            'open': it['open'],
+            'high': it['high'],
+            'low': it['low'],
+            'close': it['close'],
+            'volume': it['volume'],
+            'rsi': it['rsi'],
+            'ma_20': it['ma_20'],
+            'ma_50': it['ma_50'],
+        }
+        for it in trimmed
+    ]
 
 # SpoonAI Agent Endpoints
 
