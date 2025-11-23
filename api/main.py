@@ -43,7 +43,7 @@ def configure_logging():
     for name in ("uvicorn", "uvicorn.error", "uvicorn.access", "fastapi"):
         logging.getLogger(name).setLevel(logging.DEBUG)
 configure_logging()
-app = FastAPI(title="Pocket Hedge Fund API", version="1.0.0")
+app = FastAPI(title="Just Buy It API", version="1.0.0")
 
 # Initialize SpoonAI agents
 trading_orchestrator = None

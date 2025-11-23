@@ -8,10 +8,11 @@ interface ProgressBarProps {
   current: number;
   total: number;
   label: string;
+  percent?: number;
 }
 
-export const ProgressBar: React.FC<ProgressBarProps> = ({ current, total, label }) => {
-  const percentage = total > 0 ? (current / total) * 100 : 0;
+export const ProgressBar: React.FC<ProgressBarProps> = ({ current, total, label, percent }) => {
+  const percentage = typeof percent === 'number' ? Math.max(0, Math.min(100, percent)) : (total > 0 ? (current / total) * 100 : 0);
   
   return (
     <GlassCard className="p-6">

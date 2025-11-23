@@ -7,7 +7,7 @@ from typing import List, Dict, Any
 import asyncio
 import random
 
-app = FastAPI(title="Pocket Hedge Fund API", version="1.0.0")
+app = FastAPI(title="Just Buy It API", version="1.0.0")
 
 # CORS middleware
 app.add_middleware(

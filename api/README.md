@@ -1,6 +1,6 @@
-# Pocket Hedge Fund API
+# Just Buy It API
 
-FastAPI backend for the Pocket Hedge Fund trading platform.
+FastAPI backend for the Just Buy It trading platform.
 
 ## Features
 

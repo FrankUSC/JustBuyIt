@@ -15,6 +15,7 @@ export const AgentOrchestrator: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('Find me high growth tech stocks that are currently not overbought');
   const [isRunning, setIsRunning] = useState(false);
   const [currentPhase, setCurrentPhase] = useState(0);
+  const [progressPercent, setProgressPercent] = useState(0);
   
   const { addLog, setScanning } = useAgentStream();
   const { searchStocks } = useScoutAgent();
@@ -34,11 +35,13 @@ export const AgentOrchestrator: React.FC = () => {
     
     setIsRunning(true);
     setCurrentPhase(0);
+    setProgressPercent(0);
     setScanning(true);
     
     try {
       // Phase 1: Scout Agent
       setCurrentPhase(1);
+      setProgressPercent(5);
       addLog('SCOUT', `Processing query: "${searchQuery}"`, 'info');
       await searchStocks(searchQuery);
       {
@@ -47,11 +50,13 @@ export const AgentOrchestrator: React.FC = () => {
           addLog('SCOUT', 'No stocks found. Stopping pipeline.', 'error');
           return;
         }
+        setProgressPercent(25);
         addLog('SCOUT', `Found ${found.length} candidate stocks: ${found.map(stock => stock.ticker).join(', ')}`, 'success');
       }
       
       // Phase 2: Evaluation Agent
       setCurrentPhase(2);
+      setProgressPercent(30);
       addLog('EVAL', 'Starting risk and sentiment analysis...', 'info');
       const tickers = useScoutAgent.getState().results.map(stock => stock.ticker);
       await evaluateStocks(tickers);
@@ -61,11 +66,13 @@ export const AgentOrchestrator: React.FC = () => {
           addLog('EVAL', 'No evaluated stocks passed filters. Stopping pipeline.', 'error');
           return;
         }
+        setProgressPercent(50);
         addLog('EVAL', `Selected top ${selected.length} stocks after filtering: ${selected.map(stock => stock.ticker).join(', ')}`, 'success');
       }
       
       // Phase 3: Portfolio Manager
       setCurrentPhase(3);
+      setProgressPercent(55);
       addLog('PORTFOLIO', 'Constructing equal-weight portfolio...', 'info');
       await constructPortfolio(useEvaluationAgent.getState().evaluatedStocks);
       {
@@ -74,11 +81,13 @@ export const AgentOrchestrator: React.FC = () => {
           addLog('PORTFOLIO', 'Portfolio construction failed. Stopping pipeline.', 'error');
           return;
         }
+        setProgressPercent(75);
         addLog('PORTFOLIO', `Portfolio constructed with ${built.length} positions`, 'success');
       }
       
       // Phase 4: Backtest Agent
       setCurrentPhase(4);
+      setProgressPercent(80);
       addLog('BACKTEST', 'Initializing time machine simulation...', 'info');
       const startDate = new Date();
       startDate.setFullYear(startDate.getFullYear() - 3);
@@ -91,6 +100,7 @@ export const AgentOrchestrator: React.FC = () => {
           addLog('BACKTEST', 'Backtest produced no results. Stopping pipeline.', 'error');
           return;
         }
+        setProgressPercent(100);
         addLog('BACKTEST', 'Backtest completed successfully', 'success');
       }
       
@@ -116,7 +126,7 @@ export const AgentOrchestrator: React.FC = () => {
               placeholder="Find me high growth tech stocks that are currently not overbought..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && runFullPipeline()}
+              onKeyDown={(e) => e.key === 'Enter' && runFullPipeline()}
               className="w-full pl-12 pr-4 py-3 bg-slate-800/50 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               disabled={isRunning}
             />
@@ -147,6 +157,7 @@ export const AgentOrchestrator: React.FC = () => {
               current={currentPhase} 
               total={phases.length} 
               label="Agent Pipeline Progress"
+              percent={progressPercent}
             />
             <div className="mt-4 text-center">
               <p className="text-slate-400 text-sm">
@@ -163,9 +174,9 @@ export const AgentOrchestrator: React.FC = () => {
               key={phase.name}
               className={`p-4 rounded-xl text-center transition-all duration-300 ${
                 currentPhase > index + 1
-                  ? 'bg-emerald-600/20 border border-emerald-600/30'
+                  ? 'bg-emerald-600/20 border border-emerald-600/30 animate-pulse'
                   : currentPhase === index + 1
-                  ? 'bg-blue-600/20 border border-blue-600/30 animate-pulse'
+                  ? 'bg-blue-600/20 border border-blue-600/30'
                   : 'bg-slate-800/30 border border-white/10'
               }`}
             >

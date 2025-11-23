@@ -1,4 +1,4 @@
-# Pocket Hedge Fund
+# Just Buy It
 
 Autonomous AI quantitative trading platform with a React frontend and FastAPI backend orchestrated by SpoonAI Graph agents. Scouts candidates, evaluates fundamentals/technicals, analyzes sentiment, ranks by weighted scores, and builds a 20‑stock portfolio.
 

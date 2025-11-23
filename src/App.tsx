@@ -38,7 +38,7 @@ function App() {
               className="mb-8"
             >
               <h1 className="text-4xl font-bold text-white mb-2">
-                <GradientText text="Pocket Hedge Fund" />
+                <GradientText text="Just Buy It" />
               </h1>
               <p className="text-slate-400 text-lg">Autonomous AI Quantitative Trading Platform</p>
             </motion.div>
