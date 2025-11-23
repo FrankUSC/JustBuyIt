@@ -18,6 +18,11 @@ function App() {
   const [backtestStart, setBacktestStart] = useState('2023-01-01');
   const [backtestEnd, setBacktestEnd] = useState('2025-01-01');
   const [summary, setSummary] = useState<string>('');
+  const [llmSummary, setLLMSummary] = useState<string>('');
+  const [analystRatings, setAnalystRatings] = useState<Record<string, any>>({});
+  const [assetAllocation, setAssetAllocation] = useState<any[]>([]);
+  const [riskMetrics, setRiskMetrics] = useState<any>({});
+  const [riskPoints, setRiskPoints] = useState<any[]>([]);
 
   
 
@@ -131,11 +136,60 @@ function App() {
                       onClick={async ()=>{
                         const mem = await fetch('http://localhost:8001/api/memory/get', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ thread_id: 'phf' }) });
                         const memData = mem.ok ? await mem.json() : { messages: [] };
-                        const payload = { portfolio: selectedPortfolio, backtest_results: backtestResults, memory: memData.messages };
+                        const payload = { portfolio: selectedPortfolio, backtest_results: backtestResults, memory: memData.messages, cash: usePortfolioManager.getState().cash_remaining };
                         const res = await fetch('http://localhost:8001/api/agents/analyze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                         if (res.ok) {
                           const data = await res.json();
                           setSummary(data.summary || '');
+                          // Fallbacks when API returns limited fields
+                          const llm = data.llm_summary || `Portfolio of ${selectedPortfolio.length} positions. Top: ${selectedPortfolio.slice(0,5).map(p=>p.ticker).join(', ')}.`;
+                          setLLMSummary(llm);
+                          const ratings = data.analyst_ratings || Object.fromEntries(selectedPortfolio.map(p=>[p.ticker,{ recommendation: 'neutral', target_mean_price: null, analyst_opinions: null }]));
+                          setAnalystRatings(ratings);
+                          let allocation = data.asset_allocation || [];
+                          if (!allocation.length) {
+                            const cashRem = usePortfolioManager.getState().cash_remaining||0;
+                            const equities_mv = selectedPortfolio.reduce((s,p)=>s+(p.value||0),0);
+                            const total_mv = equities_mv + cashRem;
+                            allocation = [
+                              { class: 'Equities', market_value: equities_mv, pct_holdings: total_mv>0 ? Math.round((equities_mv/total_mv)*10000)/100 : 0 },
+                              { class: 'Cash & Cash Investments', market_value: cashRem, pct_holdings: total_mv>0 ? Math.round((cashRem/total_mv)*10000)/100 : 0 }
+                            ];
+                          }
+                          setAssetAllocation(allocation);
+                          let risk = data.risk_metrics || {};
+                          let points = data.risk_vs_return_points || [];
+                          if (!points.length) {
+                            const values = backtestResults.map(r=>r.portfolio_value);
+                            const rets: number[] = [];
+                            for (let i=1;i<values.length;i++) {
+                              const prev = values[i-1] || values[i];
+                              rets.push((values[i]-prev)/(prev||values[i]));
+                            }
+                            if (rets.length) {
+                              const mean = rets.reduce((s,x)=>s+x,0)/rets.length;
+                              const std = Math.sqrt(rets.reduce((s,x)=>s+(x-mean)*(x-mean),0)/rets.length);
+                              const riskPct = Math.round(std*Math.pow(12,0.5)*10000)/100;
+                              const retPct = Math.round(mean*12*10000)/100;
+                              const rf = 1.0;
+                              const sharpe = Math.round(((retPct-rf)/(riskPct||1))*100)/100;
+                              risk = { risk_pct: riskPct, return_pct: retPct, sharpe };
+                              points = [
+                                { label: 'Portfolio', risk: riskPct, return: retPct },
+                                { label: 'Aggressive', risk: 15.0, return: 15.3 },
+                                { label: 'Moderately Aggressive', risk: 12.85, return: 14.08 },
+                                { label: 'Moderate', risk: 9.77, return: 12.35 },
+                                { label: 'Moderately Conservative', risk: 6.87, return: 10.10 },
+                                { label: 'Conservative', risk: 3.96, return: 8.27 },
+                                { label: 'Short Term', risk: 1.83, return: 5.31 },
+                                { label: 'Risk Free', risk: 0.21, return: 3.93 }
+                              ];
+                            }
+                          }
+                          setRiskMetrics(risk);
+                          setRiskPoints(points);
+                        } else {
+                          console.error('Analysis agent failed:', await res.text());
                         }
                       }}
                       className="px-4 py-2 bg-slate-800/60 border border-white/10 rounded-lg text-xs text-white"
@@ -175,6 +229,78 @@ function App() {
                       })}
                     </div>
                   )}
+
+                  {/* LLM Narrative */}
+                  <div className="mt-4 p-4 bg-slate-800/40 border border-white/10 rounded-xl">
+                    <h4 className="text-white font-medium mb-2">LLM Summary</h4>
+                    <p className="text-slate-200 text-sm">{llmSummary || 'Summary not available yet.'}</p>
+                  </div>
+
+                  {/* Analyst Ratings */}
+                  <div className="mt-4 p-4 bg-slate-800/40 border border-white/10 rounded-xl">
+                    <h4 className="text-white font-medium mb-2">Analyst Ratings</h4>
+                    <div className="text-xs text-slate-300">
+                      {selectedPortfolio.map((p) => {
+                        const r = (analystRatings as any)[p.ticker] || {};
+                        return (
+                          <div key={p.ticker} className="flex items-center justify-between py-1">
+                            <span className="text-white font-medium">{p.ticker}</span>
+                            <span className="text-slate-400">{r.recommendation || 'neutral'}</span>
+                            <span className="text-slate-500">TP: {r.target_mean_price ? `$${r.target_mean_price}` : 'n/a'}</span>
+                            <span className="text-slate-500">Opinions: {r.analyst_opinions ?? 'n/a'}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Asset Allocation */}
+                  <div className="mt-4 p-4 bg-slate-800/40 border border-white/10 rounded-xl">
+                    <h4 className="text-white font-medium mb-2">Asset Allocation</h4>
+                    <div className="space-y-2">
+                      {assetAllocation.length ? assetAllocation.map((a: any) => (
+                        <div key={a.class}>
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-slate-300">{a.class}</span>
+                            <span className="text-slate-400">${a.market_value.toLocaleString()} · {a.pct_holdings}%</span>
+                          </div>
+                          <div className="h-2 bg-slate-700/50 rounded">
+                            <div className="h-2 bg-blue-600 rounded" style={{ width: `${a.pct_holdings}%` }} />
+                          </div>
+                        </div>
+                      )) : (
+                        <div className="text-xs text-slate-400">No allocation data yet.</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Risk vs Return */}
+                  <div className="mt-4 p-4 bg-slate-800/40 border border-white/10 rounded-xl">
+                    <h4 className="text-white font-medium mb-2">Risk vs Return</h4>
+                    <div className="text-xs text-slate-400 mb-2">From {backtestStart} to {backtestEnd}</div>
+                    <svg viewBox="0 0 400 250" className="w-full h-64 bg-slate-900/30 rounded">
+                      {/* axes */}
+                      <line x1="40" y1="210" x2="380" y2="210" stroke="#64748b" strokeWidth="1" />
+                      <line x1="40" y1="30" x2="40" y2="210" stroke="#64748b" strokeWidth="1" />
+                      {/* points */}
+                      {(riskPoints.length ? riskPoints : [{label:'Portfolio',risk:0,return:0}]).map((pt: any, i: number) => {
+                        const x = 40 + (pt.risk / 40) * 340; // scale to 0-40
+                        const y = 210 - (pt.return / 20) * 180; // scale to 0-20
+                        const isPortfolio = pt.label === 'Portfolio';
+                        return (
+                          <g key={`${pt.label}-${i}`}>
+                            <circle cx={x} cy={y} r={isPortfolio ? 6 : 4} fill={isPortfolio ? '#60a5fa' : '#94a3b8'} />
+                            <text x={x + 8} y={y - 8} fill="#cbd5e1" fontSize="10">{pt.label}</text>
+                          </g>
+                        );
+                      })}
+                    </svg>
+                    <div className="mt-2 text-xs text-slate-300">{riskMetrics && riskMetrics.risk_pct !== undefined ? (
+                      <>Risk: {riskMetrics.risk_pct}% · Return: {riskMetrics.return_pct}% · Sharpe: {riskMetrics.sharpe}</>
+                    ) : (
+                      <>Risk: n/a · Return: n/a · Sharpe: n/a</>
+                    )}</div>
+                  </div>
                 </GlassCard>
               </motion.div>
             )}

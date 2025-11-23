@@ -46,11 +46,11 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({ current, total, label,
       <div className="mt-4 flex items-center justify-between text-sm text-slate-500">
         <div className="flex items-center space-x-2">
           <Clock className="w-4 h-4" />
-          <span>Estimated: ~2 minutes</span>
+          <span>Estimated: ~10 seconds</span>
         </div>
         <div className="flex items-center space-x-2">
           <Target className="w-4 h-4" />
-          <span>50 stocks • 10 years</span>
+          <span>200+ stocks • 10 years</span>
         </div>
       </div>
     </GlassCard>

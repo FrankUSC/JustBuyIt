@@ -1,3 +1,4 @@
+from cmath import log
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timedelta
@@ -20,6 +21,11 @@ import time
 import yfinance as yf
 import pandas as pd
 import numpy as np
+try:
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+except Exception:
+    GEMINI_AVAILABLE = False
 
 # Import SpoonAI agents
 from agents import (
@@ -960,6 +966,7 @@ async def analyze_portfolio(request: Dict[str, Any]):
     try:
         portfolio = request.get("portfolio", [])
         backtest = request.get("backtest_results", [])
+        cash_value = request.get("cash", 0)
         total_positions = len(portfolio)
         avg_weight = round(100 / total_positions, 1) if total_positions else 0
         avg_score = round(sum([p.get("score", 0) for p in portfolio]) / total_positions, 2) if total_positions else 0
@@ -971,7 +978,7 @@ async def analyze_portfolio(request: Dict[str, Any]):
         summary_lines.append(f"Total positions: {total_positions}")
         if total_positions:
             summary_lines.append(f"Equal-weight target: {avg_weight}%")
-            summary_lines.append(f"Average score: {avg_score}")
+            summary_lines.append(f"Average AI score: {avg_score}")
             summary_lines.append(f"Top positions: {top_positions}")
         if backtest:
             summary_lines.append(f"Average alpha vs SPY: {avg_alpha}%")
@@ -983,9 +990,175 @@ async def analyze_portfolio(request: Dict[str, Any]):
             dominant = sorted(sector_counts.items(), key=lambda x: x[1], reverse=True)[:3]
             sector_line = ", ".join([f"{s}: {c}" for s, c in dominant])
             summary_lines.append(f"Sector distribution: {sector_line}")
+        # Analyst ratings via Yahoo Finance (best-effort)
+        analyst_ratings: Dict[str, Any] = {}
+        for p in portfolio:
+            t = p.get("ticker")
+            if not t:
+                continue
+            try:
+                tk = yf.Ticker(t)
+                info = tk.info if hasattr(tk, 'info') else {}
+                rec_key = info.get('recommendationKey', 'neutral')
+                mean_pt = info.get('targetMeanPrice')
+                opin = info.get('numberOfAnalystOpinions')
+                analyst_ratings[t] = {
+                    'recommendation': rec_key,
+                    'target_mean_price': mean_pt,
+                    'analyst_opinions': opin
+                }
+            except Exception:
+                analyst_ratings[t] = {
+                    'recommendation': 'neutral',
+                    'target_mean_price': None,
+                    'analyst_opinions': None
+                }
+
+        # Asset allocation by class using market cap and domicile heuristics
+        def classify_asset_class(ticker: str, value: float) -> str:
+            try:
+                tk = yf.Ticker(ticker)
+                info = tk.info if hasattr(tk, 'info') else {}
+                country = (info.get('country') or info.get('countryName') or 'United States')
+                mc = info.get('marketCap') or 0
+                if country != 'United States':
+                    return 'International'
+                if mc >= 10_000_000_000:
+                    return 'U.S. Large Cap'
+                elif mc <= 2_000_000_000:
+                    return 'U.S. Small Cap'
+                else:
+                    return 'U.S. Mid Cap'
+            except Exception:
+                return 'U.S. Large Cap'
+
+        allocation: Dict[str, float] = {}
+        total_mv = 0.0
+        logging.debug(f"Portfolio: {portfolio}")
+        for p in portfolio:
+            value = p.get('value', 0)
+            if not value:
+                continue
+            mv = float(value)
+            total_mv += mv
+            ac = classify_asset_class(p.get('ticker', ''), mv)
+            allocation[ac] = allocation.get(ac, 0.0) + mv
+        if cash_value and cash_value > 0:
+            total_mv += float(cash_value)
+            allocation['Cash & Cash Investments'] = allocation.get('Cash & Cash Investments', 0.0) + float(cash_value)
+        asset_allocation = [
+            {
+                'class': k,
+                'market_value': round(v, 2),
+                'pct_holdings': round((v / total_mv) * 100, 2) if total_mv > 0 else 0
+            }
+            for k, v in sorted(allocation.items(), key=lambda x: x[1], reverse=True)
+        ]
+
+        # Risk metrics from backtest
+        risk = 0.0
+        ret = 0.0
+        sharpe = 0.0
+        if backtest and len(backtest) > 1:
+            values = [r.get('portfolio_value', 0) for r in backtest]
+            rets = []
+            for i in range(1, len(values)):
+                prev = values[i-1] or values[i]
+                rets.append((values[i] - prev) / (prev if prev else values[i]))
+            if rets:
+                import numpy as np
+                risk = float(np.std(rets)) * (12 ** 0.5) * 100  # annualized approx
+                ret = float(np.mean(rets)) * 12 * 100
+                rf = 1.0  # proxy 1%
+                sharpe = (ret - rf) / (risk if risk else 1.0)
+        risk_metrics = {
+            'risk_pct': round(risk, 2),
+            'return_pct': round(ret, 2),
+            'sharpe': round(sharpe, 2)
+        }
+        # Benchmarks for risk vs return scatter
+        risk_vs_return_points = [
+            {'label': 'Portfolio', 'risk': risk_metrics['risk_pct'], 'return': risk_metrics['return_pct']},
+            {'label': 'Aggressive', 'risk': 15.0, 'return': 15.3},
+            {'label': 'Moderately Aggressive', 'risk': 12.85, 'return': 14.08},
+            {'label': 'Moderate', 'risk': 9.77, 'return': 12.35},
+            {'label': 'Moderately Conservative', 'risk': 6.87, 'return': 10.10},
+            {'label': 'Conservative', 'risk': 3.96, 'return': 8.27},
+            {'label': 'Short Term', 'risk': 1.83, 'return': 5.31},
+            {'label': 'Risk Free', 'risk': 0.21, 'return': 3.93}
+        ]
+
+        # LLM summary via Gemini (best-effort), with fallback below
         summary = "\n".join(summary_lines)
-        return {"status": "success", "summary": summary, "timestamp": datetime.now().isoformat()}
+        llm_summary = None
+        if GEMINI_AVAILABLE and os.getenv('GEMINI_API_KEY'):
+            try:
+                genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
+                model = genai.GenerativeModel('gemini-1.5-flash')
+                tickers = [p.get('ticker') for p in portfolio if p.get('ticker')]
+                prompt = (
+                    "You are a portfolio analysis assistant. Given the portfolio context, "
+                    "write a concise professional summary (2-4 sentences). Also return JSON with keys: summary (string), "
+                    "ratings (object of ticker->{recommendation,target_mean_price}), sectors (object of ticker->sector).\n\n"
+                    f"Tickers: {tickers}\n"
+                    f"Existing_ratings: {analyst_ratings}\n"
+                    f"Sector_counts: {sector_counts}\n"
+                    f"Allocation: {asset_allocation}\n"
+                    f"Risk: {risk_metrics}\n"
+                )
+                resp = model.generate_content(prompt)
+                content = resp.text if hasattr(resp, 'text') else ''
+                import json, re
+                parsed = None
+                try:
+                    parsed = json.loads(content)
+                except Exception:
+                    m = re.search(r"\{[\s\S]*\}", content)
+                    if m:
+                        try:
+                            parsed = json.loads(m.group(0))
+                        except Exception:
+                            parsed = None
+                if isinstance(parsed, dict):
+                    llm_summary = parsed.get('summary')
+                    if isinstance(parsed.get('ratings'), dict):
+                        for t, r in parsed['ratings'].items():
+                            base = analyst_ratings.get(t, {})
+                            if r.get('recommendation'):
+                                base['recommendation'] = r['recommendation']
+                            if r.get('target_mean_price') is not None:
+                                base['target_mean_price'] = r['target_mean_price']
+                            analyst_ratings[t] = base
+                    if isinstance(parsed.get('sectors'), dict):
+                        sector_map = parsed['sectors']
+                        for p in portfolio:
+                            t = p.get('ticker')
+                            if t and sector_map.get(t):
+                                p['sector'] = sector_map[t]
+            except Exception:
+                llm_summary = None
+        if not llm_summary:
+            llm_summary = (
+                f"The portfolio holds {total_positions} positions with an equal-weight target of {avg_weight}% per holding. "
+                f"Average AI score is {avg_score}, and average alpha versus SPY over the backtest period is {avg_alpha}%. "
+                f"Top positions include {top_positions}. "
+                f"Asset allocation skews toward {asset_allocation[0]['class'] if asset_allocation else 'Equities'}, "
+                f"with estimated risk of {risk_metrics['risk_pct']}% and expected annualized return of {risk_metrics['return_pct']}%."
+            )
+
+        return {
+            'status': 'success',
+            'summary': summary,
+            'llm_summary': llm_summary,
+            'analyst_ratings': analyst_ratings,
+            'asset_allocation': asset_allocation,
+            'risk_metrics': risk_metrics,
+            'risk_vs_return_points': risk_vs_return_points,
+            'timestamp': datetime.now().isoformat()
+        }
     except Exception as e:
+        logging.error(f"Analysis failed: {str(e)}")
+        e.print_stack()
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 @app.post("/api/memory/append")
