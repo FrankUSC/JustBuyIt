@@ -19,7 +19,7 @@ interface EvaluationAgentState {
   evaluateStocks: (tickers: string[]) => Promise<void>;
 }
 
-export const useEvaluationAgent = create<EvaluationAgentState>((set, get) => ({
+export const useEvaluationAgent = create<EvaluationAgentState>((set, _get) => ({
   isLoading: false,
   evaluatedStocks: [],
   currentBatch: [],
@@ -49,7 +49,7 @@ export const useEvaluationAgent = create<EvaluationAgentState>((set, get) => ({
           
           history = await historyResponse.json();
           news = await newsResponse.json();
-        } catch (error) {
+        } catch {
           // Use mock data if API fails
           history = [
             { date: '2024-01-01', close: 150, rsi: 45, ma_50: 148 },

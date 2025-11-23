@@ -20,7 +20,7 @@ interface ScoutAgentState {
   searchStocks: (query: string) => Promise<void>;
 }
 
-export const useScoutAgent = create<ScoutAgentState>((set, get) => ({
+export const useScoutAgent = create<ScoutAgentState>((set, _get) => ({
   isLoading: false,
   results: [],
   query: '',

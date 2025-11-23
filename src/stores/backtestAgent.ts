@@ -50,7 +50,7 @@ export const useBacktestAgent = create<BacktestAgentState>((set, get) => ({
       set({ totalSteps });
       
       const results: BacktestResult[] = [];
-      let currentCapital = 1250000; // Starting with $1.25M
+      let _currentCapital = 1250000; // Starting with $1.25M
       let spyValue = 100; // Normalized SPY starting value
       let portfolioValue = 100; // Normalized portfolio starting value
       
@@ -68,7 +68,7 @@ export const useBacktestAgent = create<BacktestAgentState>((set, get) => ({
         
         portfolioValue *= (1 + portfolioReturn);
         spyValue *= (1 + marketReturn);
-        currentCapital *= (1 + portfolioReturn);
+        _currentCapital *= (1 + portfolioReturn);
         
         // Simulate positions (simplified)
         const positions = [

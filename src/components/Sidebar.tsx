@@ -17,7 +17,7 @@ const navItems = [
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) => {
   return (
-    <div className="h-screen w-20 bg-slate-900/80 backdrop-blur-xl border-r border-white/10 flex flex-col items-center py-8 space-y-8">
+    <div className="relative z-[9999] h-screen w-20 bg-slate-900/80 backdrop-blur-xl border-r border-white/10 flex flex-col items-center py-8 space-y-8">
       {/* Logo */}
       <div className="mb-8">
         <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-violet-600 rounded-xl flex items-center justify-center">
@@ -44,7 +44,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, onViewChange }) =>
               <Icon size={24} />
               
               {/* Tooltip */}
-              <div className="absolute left-full ml-4 px-3 py-1 bg-slate-800 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+              <div className="absolute left-full ml-4 px-3 py-1 bg-slate-800 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-9999">
                 {item.label}
               </div>
             </button>

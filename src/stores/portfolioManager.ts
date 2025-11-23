@@ -75,12 +75,12 @@ export const usePortfolioManager = create<PortfolioManagerState>((set, get) => (
     set({ isLoading: true });
     
     try {
-      const { portfolio, total_value } = get();
+      const { portfolio, total_value: _total_value } = get();
       const current_total = portfolio.reduce((sum, pos) => sum + (pos.shares * pos.current_price), 0);
       const equal_weight = 1.0 / portfolio.length;
       
       const rebalancedPortfolio = portfolio.map(stock => {
-        const current_value = stock.shares * stock.current_price;
+        const _current_value = stock.shares * stock.current_price;
         const target_value = current_total * equal_weight;
         const target_shares = Math.floor(target_value / stock.current_price);
         

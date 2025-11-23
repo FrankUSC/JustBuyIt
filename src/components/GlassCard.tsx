@@ -9,7 +9,7 @@ interface GlassCardProps {
 export const GlassCard: React.FC<GlassCardProps> = ({ children, className }) => {
   return (
     <div className={clsx(
-      "relative overflow-hidden",
+      "relative overflow-visible",
       "bg-slate-900/60 backdrop-blur-xl",
       "border border-white/10",
       "rounded-3xl",
