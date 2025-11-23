@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8001';
 
 interface EvaluatedStock {
   ticker: string;
@@ -40,8 +41,8 @@ export const useEvaluationAgent = create<EvaluationAgentState>((set, _get) => ({
         
         try {
           const [historyResponse, newsResponse] = await Promise.all([
-            fetch(`http://localhost:8001/api/stocks/${ticker}/history`),
-            fetch(`http://localhost:8001/api/stocks/${ticker}/news`)
+            fetch(`${API}/api/stocks/${ticker}/history`),
+            fetch(`${API}/api/stocks/${ticker}/news`)
           ]);
           
           if (!historyResponse.ok || !newsResponse.ok) {

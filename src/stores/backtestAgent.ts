@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { usePortfolioManager } from './portfolioManager';
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8001';
 
 interface BacktestResult {
   date: string;
@@ -65,7 +66,7 @@ export const useBacktestAgent = create<BacktestAgentState>((set, get) => ({
       }
 
       const fetchHistory = async (ticker: string) => {
-        const res = await fetch(`http://localhost:8001/api/stocks/${ticker}/history?period=1y`);
+        const res = await fetch(`${API}/api/stocks/${ticker}/history?period=1y`);
         if (!res.ok) return [] as Array<{ date: string; close: number }>;
         const data = await res.json();
         return (data as Array<any>).map(d => ({ date: d.date, close: d.close }));
@@ -133,7 +134,7 @@ export const useBacktestAgent = create<BacktestAgentState>((set, get) => ({
         currentStep: totalSteps 
       });
       try {
-        await fetch('http://localhost:8001/api/memory/append', {
+        await fetch(`${API}/api/memory/append`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ thread_id: 'phf', role: 'assistant', content: `Backtest completed ${totalSteps} steps`, meta: { type: 'backtest', startDate, endDate, steps: totalSteps } })

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8001';
 
 interface Stock {
   ticker: string;
@@ -31,7 +32,7 @@ export const useScoutAgent = create<ScoutAgentState>((set, _get) => ({
     set({ isLoading: true, query });
     
     try {
-      const response = await fetch('http://localhost:8001/api/agents/scout', {
+      const response = await fetch(`${API}/api/agents/scout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query, stock_count: 30 })
