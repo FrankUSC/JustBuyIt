@@ -1038,8 +1038,7 @@ async def get_agents_status():
         "scout_agent": scout_agent is not None,
         "evaluation_agent": evaluation_agent is not None,
         "sentiment_agent": sentiment_agent is not None,
-        "ranking_agent": ranking_agent is not None,
-        "timestamp": datetime.now().isoformat()
+        "ranking_agent": ranking_agent is not None
     }
 
 if __name__ == "__main__":

@@ -349,6 +349,8 @@ if SPOON_AVAILABLE:
                     return out
                 except Exception as e:
                     logger.error(f"❌ LLM fundamentals evaluation error: {e}")
+                    e.print_stack()
+                    return {}
             else:
                 logger.warning("❌ No LLM result for fundamentals evaluation, fallback to basic scoring")
             out: Dict[str, int] = {}

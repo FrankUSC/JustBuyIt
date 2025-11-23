@@ -5,6 +5,8 @@ import { GradientText } from './GradientText';
 import { ProgressBar } from './ProgressBar';
 import { useAgentStream } from '../stores/agentStream';
 import { Search, TrendingUp, Activity, Brain, BarChart3, MessageSquare, Trophy } from 'lucide-react';
+import { useEvaluationAgent } from '../stores/evaluationAgent';
+import { useScoutAgent } from '../stores/scoutAgent';
 
 interface AgentPhase {
   name: string;
@@ -24,6 +26,8 @@ export const SpoonAIAgentOrchestrator: React.FC = () => {
   const [sentimentOutput, setSentimentOutput] = useState<any>(null);
   const [rankingOutput, setRankingOutput] = useState<any>(null);
   const [activeTest, setActiveTest] = useState<null | 'scout' | 'evaluation' | 'sentiment' | 'ranking'>(null);
+  const { query } = useScoutAgent();
+  const { evaluatedStocks } = useEvaluationAgent();
   
   const { addLog, setScanning, logs } = useAgentStream();
 
@@ -128,40 +132,69 @@ export const SpoonAIAgentOrchestrator: React.FC = () => {
     try {
       addLog('SPOONAI', `🧪 Testing ${agentType}...`, 'info');
       setActiveTest(agentType as 'scout' | 'evaluation' | 'sentiment' | 'ranking');
+      // Reflect status badge for the selected phase
+      setPhases(prev => prev.map((p, idx) => ({
+        ...p,
+        status:
+          (agentType === 'scout' && idx === 0) ||
+          (agentType === 'evaluation' && idx === 1) ||
+          (agentType === 'sentiment' && idx === 2) ||
+          (agentType === 'ranking' && idx === 3)
+            ? 'running'
+            : p.status
+      })));
       
       let response;
       let result;
       
       switch (agentType) {
         case 'scout':
-          response = await fetch('http://localhost:8001/api/agents/scout?stock_count=10', {
-            method: 'POST'
+          response = await fetch('http://localhost:8001/api/agents/scout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: query || '', stock_count: 10 })
           });
           result = await response.json();
-          addLog('SCOUT', `Found ${result.total_found} candidates`, 'success');
+          {
+            const totalFound = typeof result?.total_found === 'number'
+              ? result.total_found
+              : Array.isArray(result)
+                ? result.length
+                : (result?.candidates || []).length;
+            addLog('SCOUT', `Found ${totalFound} candidates`, 'success');
+          }
           setScoutOutput({
-            total_found: result.total_found,
-            sample: (result.candidates || []).slice(0, 5).map((c: any) => c.ticker)
+            total_found: typeof result?.total_found === 'number' ? result.total_found : (result?.candidates || []).length,
+            sample: (result?.candidates || []).slice(0, 5).map((c: any) => c.ticker),
+            candidates: (result?.candidates || [])
           });
           await fetch('http://localhost:8001/api/memory/append', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ thread_id: 'phf', role: 'assistant', content: `Scout found ${result.total_found}`, meta: { type: 'scout', sample: (result.candidates || []).slice(0,5).map((c:any)=>c.ticker) } })
+            body: JSON.stringify({ thread_id: 'phf', role: 'assistant', content: `Scout found ${typeof result?.total_found === 'number' ? result.total_found : (result?.candidates || []).length}`, meta: { type: 'scout', sample: (result?.candidates || []).slice(0,5).map((c:any)=>c.ticker) } })
           });
+          // Mark status completed
+          setPhases(prev => prev.map((p, idx) => ({ ...p, status: idx === 0 ? 'completed' : p.status })));
           break;
         case 'evaluation': {
-          response = await fetch('http://localhost:8001/api/agents/scout?stock_count=8', { method: 'POST' });
+          response = await fetch('http://localhost:8001/api/agents/scout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: query || '', stock_count: 8 })
+          });
           const scoutForEval = await response.json();
           result = await fetch('http://localhost:8001/api/agents/evaluate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(scoutForEval.candidates || [])
+            body: JSON.stringify((scoutForEval?.candidates || []))
           });
           const evalRes = await result.json();
           addLog('EVAL', `Evaluated ${(evalRes.evaluation_results || []).length} and ${evalRes.passed_stocks?.length || 0} passed`, 'success');
           setEvalOutput({
             total_evaluated: (evalRes.evaluation_results || []).length,
             total_passed: (evalRes.passed_stocks || []).length,
+            evaluation_results: (evalRes.evaluation_results || []),
+            passed_stocks: (evalRes.passed_stocks || []),
             sample: (evalRes.passed_stocks || []).slice(0, 5).map((p: { ticker: string; fundamental_score: number; technical_score: number }) => ({
               ticker: p.ticker,
               f: p.fundamental_score,
@@ -173,6 +206,7 @@ export const SpoonAIAgentOrchestrator: React.FC = () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ thread_id: 'phf', role: 'assistant', content: `Evaluation passed ${(evalRes.passed_stocks||[]).length}`, meta: { type: 'evaluation', sample: (evalRes.passed_stocks||[]).slice(0,5).map((p:any)=>p.ticker) } })
           });
+          setPhases(prev => prev.map((p, idx) => ({ ...p, status: idx === 1 ? 'completed' : p.status })));
           break;
         }
         case 'sentiment': {
@@ -186,22 +220,28 @@ export const SpoonAIAgentOrchestrator: React.FC = () => {
           const scores = result.sentiment_scores as Record<string, number>;
           setSentimentOutput({
             total_analyzed: result.total_analyzed,
-            sample: Object.entries(scores || {}).slice(0, 5).map(([k, v]) => ({ ticker: k, score: v }))
+            sample: Object.entries(scores || {}).slice(0, 5).map(([k, v]) => ({ ticker: k, score: v })),
+            scores
           });
           await fetch('http://localhost:8001/api/memory/append', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ thread_id: 'phf', role: 'assistant', content: `Sentiment analyzed ${result.total_analyzed}`, meta: { type: 'sentiment', sample: Object.entries(scores||{}).slice(0,5) } })
           });
+          setPhases(prev => prev.map((p, idx) => ({ ...p, status: idx === 2 ? 'completed' : p.status })));
           break;
         }
         case 'ranking': {
-          response = await fetch('http://localhost:8001/api/agents/scout?stock_count=10', { method: 'POST' });
+          response = await fetch('http://localhost:8001/api/agents/scout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: query || '', stock_count: 10 })
+          });
           const scoutForRank = await response.json();
           const evalResp = await fetch('http://localhost:8001/api/agents/evaluate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(scoutForRank.candidates || [])
+            body: JSON.stringify((scoutForRank?.candidates || []))
           });
           const evalData = await evalResp.json();
           const tickers = (evalData.passed_stocks || []).map((s: { ticker: string }) => s.ticker);
@@ -225,13 +265,15 @@ export const SpoonAIAgentOrchestrator: React.FC = () => {
           addLog('RANK', `Ranked ${(rankData.final_rankings || []).length} stocks`, 'success');
           setRankingOutput({
             total_ranked: (rankData.final_rankings || []).length,
-            sample: (rankData.final_rankings || []).slice(0, 5).map((r: { ticker: string; weighted_score: number }) => ({ ticker: r.ticker, score: r.weighted_score }))
+            sample: (rankData.final_rankings || []).slice(0, 5).map((r: { ticker: string; weighted_score: number }) => ({ ticker: r.ticker, score: r.weighted_score })),
+            final_rankings: (rankData.final_rankings || [])
           });
           await fetch('http://localhost:8001/api/memory/append', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ thread_id: 'phf', role: 'assistant', content: `Ranking completed ${(rankData.final_rankings||[]).length}`, meta: { type: 'ranking', sample: (rankData.final_rankings||[]).slice(0,5).map((r:any)=>r.ticker) } })
           });
+          setPhases(prev => prev.map((p, idx) => ({ ...p, status: idx === 3 ? 'completed' : p.status })));
           break;
         }
         default:
@@ -241,6 +283,16 @@ export const SpoonAIAgentOrchestrator: React.FC = () => {
     } catch (error) {
       console.error(`Testing ${agentType} failed:`, error);
       addLog('SPOONAI', `❌ Testing ${agentType} failed`, 'error');
+      setPhases(prev => prev.map((p, idx) => ({
+        ...p,
+        status:
+          (agentType === 'scout' && idx === 0) ||
+          (agentType === 'evaluation' && idx === 1) ||
+          (agentType === 'sentiment' && idx === 2) ||
+          (agentType === 'ranking' && idx === 3)
+            ? 'error'
+            : p.status
+      })));
     }
   };
 
@@ -327,6 +379,8 @@ export const SpoonAIAgentOrchestrator: React.FC = () => {
           </div>
         </div>
 
+        
+
         {/* Progress Indicator */}
         {isRunning && (
           <div className="mb-6">
@@ -405,6 +459,24 @@ export const SpoonAIAgentOrchestrator: React.FC = () => {
                       ))}
                     </div>
                   )}
+                  {index === 1 && ((evalOutput?.evaluation_results || evaluatedStocks || []).length > 0) && (
+                    <div className="mt-2 text-xs text-slate-300 bg-slate-900/30 rounded-lg p-2 max-h-64 overflow-y-auto">
+                      {((evalOutput?.evaluation_results || evaluatedStocks) as any[]).map((s: any, i: number) => (
+                        <div key={`${s.ticker || i}`} className="py-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-white font-medium">{s.ticker}</span>
+                            <span className="text-emerald-400">Score: {(s.score ?? s.weighted_score ?? 0).toFixed(2)}</span>
+                          </div>
+                          <div className="text-slate-400">
+                            Sentiment: {s.sentiment || 'n/a'} · Recommendation: {s.recommendation || 'n/a'}
+                          </div>
+                          {Array.isArray(s.risk_factors) && s.risk_factors.length > 0 && (
+                            <div className="text-slate-500">Risks: {s.risk_factors.slice(0,3).join(', ')}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   {index === 2 && logs && (
                     <div className="mt-2 text-xs text-slate-300 bg-slate-900/30 rounded-lg p-2 max-h-64 overflow-y-auto">
                       {logs.filter(l=>l.agent==='SENTIMENT').map((l)=> (
@@ -429,7 +501,7 @@ export const SpoonAIAgentOrchestrator: React.FC = () => {
                   {index === 0 && scoutOutput && (
                     <div className="mt-2 text-xs text-slate-300">
                       <div>Found: {scoutOutput.total_found}</div>
-                      <div>Sample: {scoutOutput.sample.join(', ')}</div>
+                      <div>Candidates: {(scoutOutput.candidates || []).map((c: any) => c.ticker).join(', ')}</div>
                     </div>
                   )}
                   {index === 1 && evalOutput && (
@@ -442,19 +514,19 @@ export const SpoonAIAgentOrchestrator: React.FC = () => {
                   {index === 2 && sentimentOutput && (
                     <div className="mt-2 text-xs text-slate-300">
                       <div>Analyzed: {sentimentOutput.total_analyzed}</div>
-                      <div>Sample: {sentimentOutput.sample.map((s: any) => `${s.ticker}:${s.score}`).join(', ')}</div>
+                      <div>{Object.entries(sentimentOutput.scores || {}).map(([t, s]) => `${t}:${s}`).join(', ')}</div>
                     </div>
                   )}
                   {index === 3 && rankingOutput && (
                     <div className="mt-2 text-xs text-slate-300">
                       <div>Ranked: {rankingOutput.total_ranked}</div>
-                      <div>Top: {rankingOutput.sample.map((s: any) => `${s.ticker}:${s.score}`).join(', ')}</div>
+                      <div>{(rankingOutput.final_rankings || []).map((r: any, i: number) => `${i+1}. ${r.ticker}:${(r.weighted_score??0).toFixed(2)}`).join(', ')}</div>
                     </div>
                   )}
                   {index === 4 && portfolio.length > 0 && (
                     <div className="mt-2 text-xs text-slate-300">
                       <div>Total: {portfolio.length}</div>
-                      <div>Sample: {portfolio.slice(0,5).map((s:any)=>`${s.ticker}:${(s.weight*100).toFixed(1)}%`).join(', ')}</div>
+                      <div>All: {portfolio.map((s:any)=>s.ticker).join(', ')}</div>
                     </div>
                   )}
                 </div>
