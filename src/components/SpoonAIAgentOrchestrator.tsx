@@ -202,7 +202,7 @@ export const SpoonAIAgentOrchestrator: React.FC = () => {
               t: p.technical_score
             }))
           });
-          await fetch('http://localhost:8001/api/memory/append', {
+          await fetch(`${API}/api/memory/append`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ thread_id: 'phf', role: 'assistant', content: `Evaluation passed ${(evalRes.passed_stocks||[]).length}`, meta: { type: 'evaluation', sample: (evalRes.passed_stocks||[]).slice(0,5).map((p:any)=>p.ticker) } })
@@ -211,7 +211,7 @@ export const SpoonAIAgentOrchestrator: React.FC = () => {
           break;
         }
         case 'sentiment': {
-          response = await fetch('http://localhost:8001/api/agents/sentiment', {
+          response = await fetch(`${API}/api/agents/sentiment`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(['AAPL', 'MSFT', 'GOOGL'])
@@ -224,7 +224,7 @@ export const SpoonAIAgentOrchestrator: React.FC = () => {
             sample: Object.entries(scores || {}).slice(0, 5).map(([k, v]) => ({ ticker: k, score: v })),
             scores
           });
-          await fetch('http://localhost:8001/api/memory/append', {
+          await fetch(`${API}/api/memory/append`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ thread_id: 'phf', role: 'assistant', content: `Sentiment analyzed ${result.total_analyzed}`, meta: { type: 'sentiment', sample: Object.entries(scores||{}).slice(0,5) } })
@@ -233,20 +233,20 @@ export const SpoonAIAgentOrchestrator: React.FC = () => {
           break;
         }
         case 'ranking': {
-          response = await fetch('http://localhost:8001/api/agents/scout', {
+          response = await fetch(`${API}/api/agents/scout`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ query: query || '', stock_count: 10 })
           });
           const scoutForRank = await response.json();
-          const evalResp = await fetch('http://localhost:8001/api/agents/evaluate', {
+          const evalResp = await fetch(`${API}/api/agents/evaluate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify((scoutForRank?.candidates || []))
           });
           const evalData = await evalResp.json();
           const tickers = (evalData.passed_stocks || []).map((s: { ticker: string }) => s.ticker);
-          const sentResp = await fetch('http://localhost:8001/api/agents/sentiment', {
+          const sentResp = await fetch(`${API}/api/agents/sentiment`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(tickers)
@@ -257,7 +257,7 @@ export const SpoonAIAgentOrchestrator: React.FC = () => {
             sentiment_scores: (sentData.sentiment_scores || {}) as Record<string, number>,
             weights: { fundamental: 5, technical: 3, sentiment: 2 }
           };
-          const rankResp = await fetch('http://localhost:8001/api/agents/rank', {
+          const rankResp = await fetch(`${API}/api/agents/rank`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(rankPayload)
@@ -269,7 +269,7 @@ export const SpoonAIAgentOrchestrator: React.FC = () => {
             sample: (rankData.final_rankings || []).slice(0, 5).map((r: { ticker: string; weighted_score: number }) => ({ ticker: r.ticker, score: r.weighted_score })),
             final_rankings: (rankData.final_rankings || [])
           });
-          await fetch('http://localhost:8001/api/memory/append', {
+          await fetch(`${API}/api/memory/append`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ thread_id: 'phf', role: 'assistant', content: `Ranking completed ${(rankData.final_rankings||[]).length}`, meta: { type: 'ranking', sample: (rankData.final_rankings||[]).slice(0,5).map((r:any)=>r.ticker) } })

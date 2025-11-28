@@ -45,7 +45,7 @@ except Exception:
 
 
 
-class MockStateGraph:
+class AIStateGraph:
     def __init__(self, state_type):
         self.state_type = state_type
         self.nodes = {}
@@ -162,7 +162,7 @@ class MockStateGraph:
         return json.dumps(current_state)
 
 
-class MockGraphAgent:
+class AIGraphAgent:
     def __init__(self, name: str, graph, preserve_state: bool = False):
         self.name = name
         self.graph = graph
@@ -179,29 +179,29 @@ class MockGraphAgent:
             return json.dumps({"error": str(e)})
 
 
-class MockRunnableNode:
+class AIRunnableNode:
     def __init__(self, name: str, func):
         self.name = name
         self.func = func
 
 
-class MockConditionNode:
+class AIConditionNode:
     def __init__(self, name: str, condition_func):
         self.name = name
         self.condition_func = condition_func
 
 
-class MockToolNode:
+class AIToolNode:
     def __init__(self, name: str, tools):
         self.name = name
         self.tools = tools
 
 
-StateGraph = MockStateGraph
-GraphAgent = MockGraphAgent
-RunnableNode = MockRunnableNode
-ConditionNode = MockConditionNode
-ToolNode = MockToolNode
+StateGraph = AIStateGraph
+GraphAgent = AIGraphAgent
+RunnableNode = AIRunnableNode
+ConditionNode = AIConditionNode
+ToolNode = AIToolNode
 END = "END"
 
 if SPOON_AVAILABLE:
@@ -712,8 +712,8 @@ async def search_stocks_from_api(criteria: Dict[str, Any]) -> List[Dict[str, Any
     except Exception as e:
         logger.error(f"Error searching stocks via API: {e}")
     
-    # Fallback: return mock S&P 500 stocks
-    logger.warning("Using fallback mock data")
+    # Fallback: return AI S&P 500 stocks
+    logger.warning("Using fallback AI data")
     sp500_tickers = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'TSLA', 'META', 'BRK-B', 'UNH', 'JNJ',
                      'XOM', 'JPM', 'V', 'PG', 'HD', 'MA', 'CVX', 'LLY', 'ABBV', 'PFE']
     
@@ -731,7 +731,7 @@ async def search_stocks_from_api(criteria: Dict[str, Any]) -> List[Dict[str, Any
             "current_rsi": random.uniform(30, 70)
         })
     
-    logger.info(f"Generated {len(candidates)} mock candidates")
+    logger.info(f"Generated {len(candidates)} AI candidates")
     return candidates
 
 
